@@ -1,12 +1,10 @@
 import numpy as np
-import torch
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import AggregativeSoftQuantifier
-from quapy.method.base import BaseQuantifier
 import quapy.functional as F
 from sklearn.base import BaseEstimator
 
-from lascal import Calibrator
+from model.classifier_calibrators import LasCalCalibration
 
 
 # -----------------------------------------------------
@@ -19,7 +17,8 @@ class OracleQuantifier:
         pass
 
     def quantify(self, X, y):
-        return y.mean()
+        prevalence = F.prevalence_from_labels(y, classes=[0,1])
+        return prevalence
 
 
 class OracleQuantifierFromCalibrator:
@@ -30,7 +29,7 @@ class OracleQuantifierFromCalibrator:
     def quantify(self, X, y):
         hcal = self.oracle_cal.calibrate(X, y)
         posteriors = hcal.predict_proba(X)
-        return posteriors.mean(axis=0)[1]
+        return posteriors.mean(axis=0)
 
 
 class OracleQuantifierFromCAP:
@@ -55,56 +54,25 @@ class OracleQuantifierFromCAP:
         acc_plus = alpha.predict_accuracy(X_pos, y_pos)
         acc_minus = alpha.predict_accuracy(X_neg, y_neg)
 
-        prev = acc_plus * (n_pos / n) + (1-acc_minus)*(n_neg/n)
-        return prev
+        pos_prev = acc_plus * (n_pos / n) + (1-acc_minus)*(n_neg/n)
+        prevalence = F.as_binary_prevalence(positive_prevalence=pos_prev)
+        return prevalence
 
 
 class LasCalQuantifier(AggregativeSoftQuantifier):
 
-    def __init__(self, classifier, val_split=5, criterion='ece', verbose=False):
+    def __init__(self, classifier, val_split=5, verbose=False):
         self.classifier = classifier
+        self.lascal = LasCalCalibration(verbose=verbose)
         self.val_split = val_split
-        assert criterion in ['ece', 'cross_entropy'], 'wrong criterion'
-        self.criterion = criterion
-        self.verbose = verbose
 
     def aggregation_fit(self, classif_predictions: LabelledCollection, data: LabelledCollection):
         self.Ptr = classif_predictions.X
         self.ytr = classif_predictions.y
         return self
 
-    def aggregate(self, classif_predictions: np.ndarray):
-
-        calibrator = Calibrator(
-            experiment_path=None,
-            verbose=self.verbose,
-            covariate=False,
-            criterion=self.criterion,
-        )
-
-        Ptr = torch.from_numpy(self.Ptr)
-        Pte = torch.from_numpy(classif_predictions)
-        ytr = torch.from_numpy(self.ytr)
-        yte = None
-
-        source_agg = {
-            'y_logits': Ptr,
-            'y_true': ytr
-        }
-        target_agg = {
-            'y_logits': Pte,
-            'y_true': yte
-        }
-
-        calibrated_agg = calibrator.calibrate(
-            method_name='lascal',
-            source_agg=source_agg,
-            target_agg=target_agg,
-            train_agg=None,
-        )
-
-        y_logits = calibrated_agg['target']['y_logits']
-        Pte_recalib = y_logits.softmax(-1).numpy()
+    def aggregate(self, Pte):
+        Pte_recalib = self.lascal.predict_proba(self.Ptr, self.ytr, Pte)
         prevalence = Pte_recalib.mean(axis=0)
         return prevalence
 

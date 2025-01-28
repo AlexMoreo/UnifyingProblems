@@ -1,6 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 
-from model import *
+from oracles import *
 import quapy as qp
 
 dataset=qp.datasets.UCI_BINARY_DATASETS[0]
@@ -46,12 +46,12 @@ print(f'true_prev={true_prev[1]:.4f}')
 
 oquant = OracleQuantifier()
 oquant_prev = oquant.quantify(Xte, yte)
-print(f'{oquant_prev=:.4f}')
+print(f'{oquant_prev[1]=:.4f}')
 
 oquant_from_cap = OracleQuantifierFromCAP(OracleCAP(h=lr))
 oquant_from_cap_prev = oquant_from_cap.quantify(Xte, yte)
-print(f'{oquant_from_cap_prev=:.4f}')
+print(f'{oquant_from_cap_prev[1]=:.4f}')
 
 oquant_from_cal = OracleQuantifierFromCalibrator(OracleCalibrator(h=lr))
 oquant_from_cal_prev = oquant_from_cal.quantify(Xte, yte)
-print(f'{oquant_from_cal_prev=:.4f}')
+print(f'{oquant_from_cal_prev[1]=:.4f}')
