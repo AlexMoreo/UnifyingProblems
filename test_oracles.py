@@ -1,6 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 
-from oracles import *
+from model.oracles import *
 import quapy as qp
 
 dataset=qp.datasets.UCI_BINARY_DATASETS[0]

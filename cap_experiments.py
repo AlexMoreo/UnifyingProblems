@@ -23,28 +23,28 @@ for dataset in qp.datasets.UCI_BINARY_DATASETS[:10]:
 
     Xtr, ytr = train.Xy
 
-    lr = LogisticRegression()
+    h = LogisticRegression()
     # Ptr = cross_val_predict(lr, Xtr, ytr, cv=5, n_jobs=-1, method='predict_proba')
-    lr.fit(Xtr, ytr)
+    h.fit(Xtr, ytr)
 
-    val_posteriors = lr.predict_proba(val.X)
+    Xva, yva = val.Xy
 
-    atc = ATC(acc_fn=accuracy)
-    atc.fit(val, val_posteriors)
+
+    atc = ATC(h)
+    atc.fit(Xva, yva)
 
     val_prot = UPP(val, sample_size=len(val), repeats=50, random_state=0, return_type='labelled_collection')
-    val_prot_posteriors = [lr.predict_proba(sample.X) for sample in val_prot()]
-    doc = DoC(acc_fn=accuracy, protocol=val_prot, prot_posteriors=val_prot_posteriors)
-    doc.fit(val, val_posteriors)
+    doc = DoC(h, protocol=val_prot)
+    doc.fit(Xva, yva)
 
-    lascal2cap = LasCal2CAP(classifier=lr)
-    lascal2cap.fit(val, val_posteriors)
+    lascal2cap = LasCal2CAP(classifier=h)
+    lascal2cap.fit(Xva, yva)
 
-    hdc2cap = HDC2CAP(classifier=lr)
-    hdc2cap.fit(val, val_posteriors)
+    hdc2cap = HDC2CAP(classifier=h)
+    hdc2cap.fit(Xva, yva)
 
-    pacc2cap = PACC2CAP(classifier=lr)
-    pacc2cap.fit(val, val_posteriors)
+    pacc2cap = PACC2CAP(classifier=h)
+    pacc2cap.fit(Xva, yva)
 
     atc_err = []
     doc_err = []
@@ -55,16 +55,15 @@ for dataset in qp.datasets.UCI_BINARY_DATASETS[:10]:
     app = UPP(test, sample_size=len(test), repeats=10, return_type='labelled_collection')
     for test_shifted in tqdm(app(), total=app.total()):
         Xte, yte = test_shifted.Xy
-        Pte = lr.predict_proba(Xte)
 
-        y_pred = lr.predict(Xte)
+        y_pred = h.predict(Xte)
         true_acc = accuracy(y_true=yte, y_pred=y_pred)
 
-        atc_acc = atc.predict(Xte, Pte)
-        doc_acc = doc.predict(Xte, Pte)
-        lascal2cap_acc = lascal2cap.predict(Xte, Pte)
-        hdc2cap_acc = hdc2cap.predict(Xte, Pte)
-        pacc2cap_acc = pacc2cap.predict(Xte, Pte)
+        atc_acc = atc.predict(Xte)
+        doc_acc = doc.predict(Xte)
+        lascal2cap_acc = lascal2cap.predict(Xte)
+        hdc2cap_acc = hdc2cap.predict(Xte)
+        pacc2cap_acc = pacc2cap.predict(Xte)
 
         atc_err.append(cap_error(acc_true=true_acc, acc_estim=atc_acc))
         doc_err.append(cap_error(acc_true=true_acc, acc_estim=doc_acc))

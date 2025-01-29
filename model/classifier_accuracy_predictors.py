@@ -30,87 +30,74 @@ from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCal
 
 
 class ClassifierAccuracyPrediction(ABC):
-    def __init__(self):
-        pass
+
+    def __init__(self, classifier: BaseEstimator):
+        self.h = classifier
+
+    def classify(self, X):
+        return self.h.predict(X)
+
+    def posterior_probabilities(self, X):
+        if hasattr(self.h, "predict_proba"):
+            P = self.h.predict_proba(X)
+        else:
+            dec_scores = self.h.decision_function(X)
+            if dec_scores.dnim == 1:
+                dec_scores = np.vstack([-dec_scores, dec_scores]).T
+            P = scipy.special.softmax(dec_scores, axis=1)
+        return P
 
     @abstractmethod
-    def fit(self, val: LabelledCollection, posteriors):
+    def fit(self, X, y):
         """
         Trains a CAP method.
 
-        :param val: training data
+        :param X: training data
+        :param y: labels
         :return: self
         """
         ...
 
     @abstractmethod
-    def predict(self, X, posteriors, oracle_prev=None) -> float:
+    def predict(self, X) -> float:
         """
-        Predicts directly the accuracy using the accuracy function
+        Predicts the accuracy of the classifier on X
 
         :param X: test data
-        :param oracle_prev: np.ndarray with the class prevalence of the test set as estimated by
-            an oracle. This is meant to test the effect of the errors in CAP that are explained by
-            the errors in quantification performance
-        :return: float
+        :return: float, predicted accuracy
         """
         ...
 
-    def batch_predict(self, prot: AbstractProtocol, posteriors, oracle_prevs=None) -> list[float]:
-        if oracle_prevs is None:
-            estim_accs = [self.predict(Ui.X, posteriors=P) for Ui, P in IT.zip_longest(prot(), posteriors)]
-            return estim_accs
-        else:
-            assert isinstance(oracle_prevs, List), "Invalid oracles"
-            estim_accs = [
-                self.predict(Ui.X, P, oracle_prev=op) for Ui, P, op in IT.zip_longest(prot(), posteriors, oracle_prevs)
-            ]
-            return estim_accs
 
-
-class CAPDirect(ClassifierAccuracyPrediction):
-    def __init__(self, acc: Callable):
-        super().__init__()
-        self.acc = acc
-
-    def true_acc(self, sample: LabelledCollection, posteriors):
-        y_pred = np.argmax(posteriors, axis=-1)
-        y_true = sample.y
-        conf_table = confusion_matrix(y_true, y_pred=y_pred, labels=sample.classes_)
-        return self.acc(conf_table)
-
-    def switch_and_fit(self, acc_fn, data, posteriors):
-        self.acc = acc_fn
-        return self.fit(data, posteriors)
-
-
-
-class ATC(CAPDirect):
+class ATC(ClassifierAccuracyPrediction):
 
     VALID_FUNCTIONS = {"maxconf", "neg_entropy"}
 
-    def __init__(self, acc_fn: Callable, scoring_fn="maxconf"):
+    def __init__(self, classifier: BaseEstimator, scoring_fn="maxconf"):
         assert scoring_fn in ATC.VALID_FUNCTIONS, f"unknown scoring function, use any from {ATC.VALID_FUNCTIONS}"
-        super().__init__(acc_fn)
+        super().__init__(classifier)
         self.scoring_fn = scoring_fn
 
-    def get_scores(self, P):
+    def _get_scores(self, P):
         if self.scoring_fn == "maxconf":
             scores = max_conf(P)
         else:
             scores = neg_entropy(P)
         return scores
 
-    def fit(self, val: LabelledCollection, posteriors):
+    def fit(self, X, y):
+        posteriors = self.posterior_probabilities(X)
         pred_labels = np.argmax(posteriors, axis=1)
-        true_labels = val.y
-        scores = self.get_scores(posteriors)
-        _, self.threshold = self.__find_ATC_threshold(scores=scores, labels=(pred_labels == true_labels))
+        scores = self._get_scores(posteriors)
+        correct_predictions = (pred_labels == y)
+        _, self.threshold = self.__find_ATC_threshold(scores=scores, labels=correct_predictions)
         return self
 
-    def predict(self, X, posteriors, oracle_prev=None):
-        scores = self.get_scores(posteriors)
-        return self.__get_ATC_acc(self.threshold, scores)
+    def predict(self, X):
+        posteriors = self.posterior_probabilities(X)
+        scores = self._get_scores(posteriors)
+        predicted_acc = self.__get_ATC_acc(self.threshold, scores)
+        return predicted_acc
 
     def __find_ATC_threshold(self, scores, labels):
         # code copy-pasted from https://github.com/saurabhgarg1996/ATC_code/blob/master/ATC_helper.py
@@ -141,24 +128,24 @@ class ATC(CAPDirect):
         return np.mean(scores >= thres)
 
 
-class DoC(CAPDirect):
-    def __init__(self, acc_fn: Callable, protocol: AbstractProtocol, prot_posteriors, clip_vals=(0, 1)):
-        super().__init__(acc_fn)
+class DoC(ClassifierAccuracyPrediction):
+
+    def __init__(self, classifier: BaseEstimator, protocol: AbstractProtocol, clip_vals=(0, 1)):
+        super().__init__(classifier)
         self.protocol = protocol
-        self.prot_posteriors = prot_posteriors
         self.clip_vals = clip_vals
 
-    def _get_post_stats(self, X, y, posteriors):
+    def _get_post_stats(self, posteriors, y):
         P = posteriors
         mc = max_conf(P)
         pred_labels = np.argmax(P, axis=-1)
-        acc = self.acc(y, pred_labels)
-        return mc, acc
+        accuracy = (y == pred_labels).mean()
+        return mc, accuracy
 
     def _doc(self, mc1, mc2):
         return mc2.mean() - mc1.mean()
 
-    def train_regression(self, prot_mcs, prot_accs):
+    def _train_regression(self, prot_mcs, prot_accs):
         docs = [self._doc(self.val_mc, prot_mc_i) for prot_mc_i in prot_mcs]
         target = [self.val_acc - prot_acc_i for prot_acc_i in prot_accs]
         docs = np.asarray(docs).reshape(-1, 1)
@@ -166,41 +153,31 @@ class DoC(CAPDirect):
         lin_reg = LinearRegression()
         return lin_reg.fit(docs, target)
 
-    def predict_regression(self, test_mc):
+    def _predict_regression(self, test_mc):
         docs = np.asarray([self._doc(self.val_mc, test_mc)]).reshape(-1, 1)
         pred_acc = self.reg_model.predict(docs)
         return self.val_acc - pred_acc
 
-    def fit(self, val: LabelledCollection, posteriors):
-        self.val_mc, self.val_acc = self._get_post_stats(*val.Xy, posteriors)
+    def fit(self, X, y):
+        posteriors = self.posterior_probabilities(X)
+        self.val_mc, self.val_acc = self._get_post_stats(posteriors, y)
 
         prot_stats = [
-            self._get_post_stats(*sample.Xy, P) for sample, P in IT.zip_longest(self.protocol(), self.prot_posteriors)
+            self._get_post_stats(self.posterior_probabilities(sample.X), sample.y) for sample in self.protocol()
         ]
         prot_mcs, prot_accs = list(zip(*prot_stats))
 
-        self.reg_model = self.train_regression(prot_mcs, prot_accs)
+        self.reg_model = self._train_regression(prot_mcs, prot_accs)
 
         return self
 
-    def predict(self, X, posteriors, oracle_prev=None):
+    def predict(self, X):
+        posteriors = self.posterior_probabilities(X)
         mc = max_conf(posteriors)
-        acc_pred = self.predict_regression(mc)[0]
+        acc_pred = self._predict_regression(mc)[0]
         if self.clip_vals is not None:
             acc_pred = float(np.clip(acc_pred, *self.clip_vals))
         return acc_pred
-
-
-def get_posteriors_from_h(h, X):
-    if hasattr(h, "predict_proba"):
-        P = h.predict_proba(X)
-    else:
-        n_classes = len(h.classes_)
-        dec_scores = h.decision_function(X)
-        if n_classes == 1:
-            dec_scores = np.vstack([-dec_scores, dec_scores]).T
-        P = scipy.special.softmax(dec_scores, axis=1)
-    return P
 
 
 def max_conf(P, keepdims=False):
@@ -235,59 +212,69 @@ def smooth(prevalences, epsilon=1e-5, axis=None):
     return prevalences
 
 
-class LasCal2CAP(CAPDirect):
+class LasCal2CAP(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator):
-        self.classifier = classifier
+        super().__init__(classifier)
 
-    def fit(self, val: LabelledCollection, posteriors):
-        X, y = val.Xy
-        y_hat = self.classifier.predict(X)
+    def fit(self, X, y):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
 
-        # Xpos = X[y_hat == 1]
-        self.ypos = y[y_hat == 1]
+        # h(x)=1
         self.Ppos = posteriors[y_hat == 1]
+        self.ypos = y[y_hat == 1]
 
-        Xneg = X[y_hat == 0]
-        self.yneg = y[y_hat == 0]
+        # h(x)=0
         self.Pneg = posteriors[y_hat == 0]
+        self.yneg = y[y_hat == 0]
 
         return self
 
-    def predict(self, X, posteriors, oracle_prev=None):
+    def predict(self, X):
         lascal = LasCalCalibration()
-        y_hat = self.classifier.predict(X)
+
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
+
         cal_pos = lascal.predict_proba(self.Ppos, self.ypos, posteriors[y_hat==1])
         cal_neg = lascal.predict_proba(self.Pneg, self.yneg, posteriors[y_hat==0])
+
         n_instances = posteriors.shape[0]
+
         acc_pred = (cal_pos[:,1].sum() + cal_neg[:,0].sum()) / n_instances
+
         return acc_pred
 
 
-class HDC2CAP(CAPDirect):
+class HDC2CAP(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator):
-        self.classifier = classifier
+        super().__init__(classifier)
 
-    def fit(self, val: LabelledCollection, posteriors):
-        X, y = val.Xy
-        y_hat = self.classifier.predict(X)
+    def fit(self, X, y):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
 
+        # h(x)=1
         Xpos = X[y_hat == 1]
         ypos = y[y_hat == 1]
         Ppos = posteriors[y_hat == 1]
 
+        # h(x)=0
         Xneg = X[y_hat == 0]
         yneg = y[y_hat == 0]
         Pneg = posteriors[y_hat == 0]
 
-        DMpos = DistributionMatchingY(classifier=self.classifier, nbins=10)
+        # calibrator for predicted positives
+        DMpos = DistributionMatchingY(classifier=self.h, nbins=10)
         preclassified_pos = LabelledCollection(Ppos, ypos)
         data_pos = LabelledCollection(Xpos, ypos)
         DMpos.aggregation_fit(classif_predictions=preclassified_pos, data=data_pos)
         self.cal_pos = HellingerDistanceCalibration(DMpos)
 
-        DMneg = DistributionMatchingY(classifier=self.classifier, nbins=10)
+        # calibrator for predicted negatives
+        DMneg = DistributionMatchingY(classifier=self.h, nbins=10)
         preclassified_neg = LabelledCollection(Pneg, yneg)
         data_neg = LabelledCollection(Xneg, yneg)
         DMneg.aggregation_fit(classif_predictions=preclassified_neg, data=data_neg)
@@ -295,16 +282,20 @@ class HDC2CAP(CAPDirect):
 
         return self
 
-    def predict(self, X, posteriors, oracle_prev=None):
-        y_hat = self.classifier.predict(X)
+    def predict(self, X):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
+
         cal_pos = self.cal_pos.predict_proba(posteriors[y_hat==1])
         cal_neg = self.cal_neg.predict_proba(posteriors[y_hat==0])
+
         n_instances = posteriors.shape[0]
         acc_pred = (cal_pos[:,1].sum() + cal_neg[:,0].sum()) / n_instances
+
         return acc_pred
 
 
-class PACC2CAP_(CAPDirect):
+class PACC2CAP_(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator, from_posteriors=True):
         self.classifier = classifier
@@ -345,33 +336,34 @@ class PACC2CAP_(CAPDirect):
         return acc_pred
 
 
-class PACC2CAP(CAPDirect):
+class PACC2CAP(ClassifierAccuracyPrediction):
 
-    def __init__(self, classifier: BaseEstimator): #, from_posteriors=True):
-        self.classifier = classifier
-        # self.from_posteriors = from_posteriors
+    def __init__(self, classifier: BaseEstimator):
+        super().__init__(classifier)
 
-    def fit(self, val: LabelledCollection, posteriors):
-        X, y = val.Xy
-        y_hat = self.classifier.predict(X)
+    def fit(self, X, y):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
 
-        # Cov_pos = posteriors[y_hat == 1] if self.from_posteriors else X[y_hat == 1]
+        # h(x)=1
         Xpos = X[y_hat == 1]
         ypos = y[y_hat == 1]
         Ppos = posteriors[y_hat == 1]
 
-        # Cov_neg = posteriors[y_hat == 0] if self.from_posteriors else X[y_hat == 0]
+        # h(x)=0
         Xneg = X[y_hat == 0]
         yneg = y[y_hat == 0]
         Pneg = posteriors[y_hat == 0]
 
-        self.q_pos = PACC(classifier=self.classifier)
+        # quantifier for predicted positives
+        self.q_pos = PACC(classifier=self.h)
         self.q_pos.aggregation_fit(
             LabelledCollection(Ppos, ypos),
             LabelledCollection(Xpos, ypos),
         )
 
-        self.q_neg = PACC(classifier=self.classifier)
+        # quantifier for predicted negatives
+        self.q_neg = PACC(classifier=self.h)
         self.q_neg.aggregation_fit(
             LabelledCollection(Pneg, yneg),
             LabelledCollection(Xneg, yneg)
@@ -379,14 +371,20 @@ class PACC2CAP(CAPDirect):
 
         return self
 
-    def predict(self, X, posteriors, oracle_prev=None):
-        y_hat = self.classifier.predict(X)
-        Ppos = posteriors[y_hat == 1]
-        Pneg = posteriors[y_hat == 0]
-        pos_prev = self.q_pos.aggregate(Ppos)[1]
-        neg_prev = self.q_neg.aggregate(Pneg)[0]
+    def predict(self, X):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
+
+        # predicted prevalence of positive instances in predicted positives
+        pos_prev = self.q_pos.aggregate(posteriors[y_hat == 1])[1]
+
+        # predicted prevalence of negative instances in predicted negatives
+        neg_prev = self.q_neg.aggregate(posteriors[y_hat == 0])[0]
+
         n_instances = posteriors.shape[0]
         n_pred_pos = y_hat.sum()
         n_pred_neg = n_instances-n_pred_pos
+
         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
+
         return acc_pred
