@@ -47,8 +47,8 @@ class LasCalCalibration:
         )
 
         y_logits = calibrated_agg['target']['y_logits']
-        Pte_recalib = y_logits.softmax(-1).numpy()
-        return Pte_recalib
+        Pte_calib = y_logits.softmax(-1).numpy()
+        return Pte_calib
 
 
 class HellingerDistanceCalibration:

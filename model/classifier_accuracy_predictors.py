@@ -24,6 +24,7 @@ from quapy.protocol import AbstractProtocol
 from sklearn.base import BaseEstimator
 
 from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration
+from util import posterior_probabilities
 
 
 # Adapted from https://github.com/lorenzovolpi/QuAcc/blob/devel
@@ -38,14 +39,7 @@ class ClassifierAccuracyPrediction(ABC):
         return self.h.predict(X)
 
     def posterior_probabilities(self, X):
-        if hasattr(self.h, "predict_proba"):
-            P = self.h.predict_proba(X)
-        else:
-            dec_scores = self.h.decision_function(X)
-            if dec_scores.dnim == 1:
-                dec_scores = np.vstack([-dec_scores, dec_scores]).T
-            P = scipy.special.softmax(dec_scores, axis=1)
-        return P
+        return posterior_probabilities(self.h, X)
 
     @abstractmethod
     def fit(self, X, y):
