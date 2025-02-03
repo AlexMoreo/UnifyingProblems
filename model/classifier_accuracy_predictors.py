@@ -5,7 +5,7 @@ from typing import Callable
 import numpy as np
 import quapy as qp
 from quapy.data.base import LabelledCollection
-from quapy.method.aggregative import AggregativeQuantifier, BaseQuantifier, DistributionMatchingY, PACC
+from quapy.method.aggregative import AggregativeQuantifier, BaseQuantifier, DistributionMatchingY, PACC, ACC
 from quapy.protocol import UPP, AbstractProtocol
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import LinearRegression
@@ -21,7 +21,9 @@ from typing import List
 
 from quapy.data.base import LabelledCollection
 from quapy.protocol import AbstractProtocol
+import quapy.functional as F
 from sklearn.base import BaseEstimator
+from typing_extensions import override
 
 from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration
 from util import posterior_probabilities
@@ -382,3 +384,140 @@ class PACC2CAP(ClassifierAccuracyPrediction):
         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
 
         return acc_pred
+
+
+def accuracy_from_contingency_table(ct):
+    return np.diagonal(ct).sum() / ct.sum()
+
+
+class LEAP(ClassifierAccuracyPrediction):
+
+    def __init__(self,
+                 classifier,
+                 q_class: AggregativeQuantifier = ACC(),
+                 acc_fn: Callable=accuracy_from_contingency_table):
+        super().__init__(classifier)
+        self.q_class = q_class
+        self.acc_fn = acc_fn
+
+    def predict(self, X):
+        """
+        Predicts the contingency table for the test data
+
+        :param X: test data
+        :param posteriors: posterior probabilities of X
+        :return: the accuracy function as computed from a contingency table
+        """
+        posteriors = self.posterior_probabilities(X)
+        cont_table = self.predict_ct(X, posteriors)
+        return self.acc_fn(cont_table)
+
+    def _prepare_quantifier(self):
+        assert isinstance(self.q_class, AggregativeQuantifier), (
+            f"quantifier {self.q_class} is not of type aggregative"
+        )
+        self.q = deepcopy(self.q_class)
+        self.q.set_params(classifier=self.h)
+
+    def fit(self, X, y):
+        data = LabelledCollection(X,y)
+        posteriors = self.posterior_probabilities(X)
+        data = self._preprocess_data(data, posteriors)
+        self._prepare_quantifier()
+        classif_predictions = self.q.classifier_fit_predict(data, fit_classifier=False, predict_on=data)
+        self.q.aggregation_fit(classif_predictions, data)
+        return self
+
+    def _preprocess_data(self, data: LabelledCollection, posteriors):
+        self.classes_ = data.classes_
+        y_hat = np.argmax(posteriors, axis=-1)
+        y_true = data.y
+        self.cont_table = confusion_matrix(y_true, y_pred=y_hat, labels=data.classes_)
+        self.A, self.partial_b = self._construct_equations()
+        return data
+
+    def _construct_equations(self):
+        # we need a n x n matrix of unknowns
+        n = self.cont_table.shape[1]
+
+        # I is the matrix of indexes of unknowns. For example, if we need the counts of
+        # all instances belonging to class i that have been classified as belonging to 0, 1, ..., n:
+        # the indexes of the corresponding unknowns are given by I[i,:]
+        I = np.arange(n * n).reshape(n, n)
+
+        # system of equations: Ax=b, A.shape=(n*n, n*n,), b.shape=(n*n,)
+        A = np.zeros(shape=(n * n, n * n))
+        b = np.zeros(shape=(n * n))
+
+        # first equation: the sum of all unknowns is 1
+        eq_no = 0
+        A[eq_no, :] = 1
+        b[eq_no] = 1
+        eq_no += 1
+
+        # (n-1)*(n-1) equations: the class cond ratios should be the same in training and in test due to the
+        # PPS assumptions. Example in three classes, a ratio: a/(a+b+c) [test] = ar [a ratio in training]
+        # a / (a + b + c) = ar
+        # a = (a + b + c) * ar
+        # a = a ar + b ar + c ar
+        # a - a ar - b ar - c ar = 0
+        # a (1-ar) + b (-ar)  + c (-ar) = 0
+        class_cond_ratios_tr = self.cont_table / self.cont_table.sum(axis=1, keepdims=True)
+        for i in range(1, n):
+            for j in range(1, n):
+                ratio_ij = class_cond_ratios_tr[i, j]
+                A[eq_no, I[i, :]] = -ratio_ij
+                A[eq_no, I[i, j]] = 1 - ratio_ij
+                b[eq_no] = 0
+                eq_no += 1
+
+        # n-1 equations: the sum of class-cond counts must equal the C&C prevalence prediction
+        for i in range(1, n):
+            A[eq_no, I[:, i]] = 1
+            # b[eq_no] = cc_prev_estim[i]
+            eq_no += 1
+
+        # n-1 equations: the sum of true true class-conditional positives must equal the class prev label in test
+        for i in range(1, n):
+            A[eq_no, I[i, :]] = 1
+            # b[eq_no] = q_prev_estim[i]
+            eq_no += 1
+
+        return A, b
+
+    def predict_ct(self, test, posteriors):
+        """
+        :param test: test instances
+        :param posteriors: posterior probabilities of test instances
+        :return: a confusion matrix in the return format of `sklearn.metrics.confusion_matrix`
+        """
+
+        n = self.cont_table.shape[1]
+
+        h_label_preds = np.argmax(posteriors, axis=-1)
+
+        cc_prev_estim = F.prevalence_from_labels(h_label_preds, self.classes_)
+        q_prev_estim = self.q.quantify(test)
+
+        A = self.A
+        b = self.partial_b
+
+        # b is partially filled; we finish the vector by plugin in the classify and count
+        # prevalence estimates (n-1 values only), and the quantification estimates (n-1 values only)
+
+        b[-2 * (n - 1) : -(n - 1)] = cc_prev_estim[1:]
+        b[-(n - 1) :] = q_prev_estim[1:]
+
+        # try the fast solution (may not be valid)
+        x = np.linalg.solve(A, b)
+
+        if any(x < 0) or not np.isclose(x.sum(), 1):
+
+            # try the iterative solution
+            def loss(x):
+                return np.linalg.norm(A @ x - b, ord=2)
+
+            x = F.optim_minimize(loss, n_classes=n**2)
+
+        cont_table_test = x.reshape(n, n)
+        return cont_table_test

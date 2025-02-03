@@ -51,8 +51,11 @@ class OracleQuantifierFromCAP:
         n_neg = n-n_pos
 
         alpha = self.oracle_cap
-        acc_plus = alpha.predict_accuracy(X_pos, y_pos)
-        acc_minus = alpha.predict_accuracy(X_neg, y_neg)
+        acc_plus = acc_minus = 0
+        if n_pos>0:
+            acc_plus = alpha.predict_accuracy(X_pos, y_pos)
+        if n_neg>0:
+            acc_minus = alpha.predict_accuracy(X_neg, y_neg)
 
         pos_prev = acc_plus * (n_pos / n) + (1-acc_minus)*(n_neg/n)
         prevalence = F.as_binary_prevalence(positive_prevalence=pos_prev)
@@ -127,14 +130,14 @@ class QuantificationCalibrationMap:
     def __init__(self, quantifier):
         self.quantifier = quantifier
 
-    def fit(self, uncal_scores, y):
+    def fit(self, X, uncal_scores, y):
         if uncal_scores.ndim==2:
             uncal_scores = uncal_scores[:, 1]
         unique = sorted(np.unique(uncal_scores))
         self.cal_map = {}
         for u in unique:
             sel = uncal_scores==u
-            Xsel = uncal_scores[sel]
+            Xsel = X[sel]
             ysel = y[sel]
             prev = self.quantifier.quantify(Xsel, ysel)
             self.cal_map[u] = prev
@@ -143,8 +146,8 @@ class QuantificationCalibrationMap:
     def calibrate(self, uncal_scores):
         if uncal_scores.ndim == 2:
             uncal_scores = uncal_scores[:, 1]
-        cal_scores = np.asarray([self.cal_map[score] for score in uncal_scores])
-        return np.vstack((1-cal_scores, cal_scores)).T
+        cal_scores = np.vstack([self.cal_map[score] for score in uncal_scores])
+        return cal_scores
 
 
 class CalibratedClassifierFromMap:
@@ -186,7 +189,7 @@ class OracleCalibratorFromQuantification:
     def calibrate(self, X, y):
         uncal_post = self.h.predict_proba(X)
         calibration_map = QuantificationCalibrationMap(self.oracle_quantifier)
-        calibration_map.fit(uncal_post, y)
+        calibration_map.fit(X, uncal_post, y)
         return CalibratedClassifierFromMap(self.h, calibration_map)
 
 

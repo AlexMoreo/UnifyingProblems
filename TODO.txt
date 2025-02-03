@@ -1,0 +1,7 @@
+- Add classifiers (MLP o deep, LR, kNN, SVM, DecisionTrees) to calibration experiments
+- Add some calibrator (Head2Tail, etc)
+- Add covariate shift experiments
+- Add calibration plots
+- Add calibration via kde distribution matching
+- Refactor CAP experiments with dataframes
+- Refactor Calibration experiments with dataframes

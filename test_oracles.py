@@ -1,5 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 
+from util import cal_error
 from model.oracles import *
 import quapy as qp
 
@@ -55,3 +56,26 @@ print(f'{oquant_from_cap_prev[1]=:.4f}')
 oquant_from_cal = OracleQuantifierFromCalibrator(OracleCalibrator(h=lr))
 oquant_from_cal_prev = oquant_from_cal.quantify(Xte, yte)
 print(f'{oquant_from_cal_prev[1]=:.4f}')
+
+# ---------------------------------------
+print('-'*80)
+print('Calibration Oracles')
+print('-'*80)
+
+ocal = OracleCalibrator(h=lr)
+hcal = ocal.calibrate(Xte, yte)
+cal_probs = hcal.predict_proba(Xte)
+ocal_ece = cal_error(cal_probs, yte)
+print(f'{ocal_ece:.4f}')
+
+ocal_q = OracleCalibratorFromQuantification(h=lr, oracle_quantifier=OracleQuantifier())
+hcal = ocal_q.calibrate(Xte, yte)
+cal_probs = hcal.predict_proba(Xte)
+ocal_q_ece = cal_error(cal_probs, yte)
+print(f'{ocal_q_ece:.4f}')
+
+ocal_a = OracleCalibratorFromCAP(h=lr, oracle_cap=OracleCAP(h=lr))
+hcal = ocal_a.calibrate(Xte, yte)
+cal_probs = hcal.predict_proba(Xte)
+ocal_a_ece = cal_error(cal_probs, yte)
+print(f'{ocal_a_ece:.4f}')

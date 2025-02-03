@@ -1,9 +1,7 @@
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import DistributionMatchingY
-from quapy.protocol import ArtificialPrevalenceProtocol, UPP
-from sklearn.calibration import CalibratedClassifierCV
+from quapy.protocol import UPP
 
-from lascal import Ece, EceLabelShift
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_predict
 import torch
@@ -12,24 +10,10 @@ import quapy as qp
 from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration, HeadToTailCalibrator, CpcsCalibrator
 from tqdm import tqdm
 
-
-def cal_error(Pte, yte):
-    expected_cal_error = Ece(adaptive_bins=True, n_bins=15, p=2, classwise=False)
-
-    logits = prob2logits(Pte)
-    ece = expected_cal_error(
-        logits=logits,
-        labels=torch.from_numpy(yte),
-    ).item()
-
-    return ece * 100
+from util import cal_error
 
 
-def prob2logits(P, asnumpy=False):
-    logits = torch.log(torch.from_numpy(P))
-    if asnumpy:
-        logits = logits.numpy()
-    return logits
+
 
 
 uncal_ECE=[]

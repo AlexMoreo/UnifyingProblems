@@ -2,6 +2,9 @@ import quapy as qp
 import numpy as np
 import scipy
 import pandas as pd
+import torch
+
+from lascal import Ece
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
@@ -24,3 +27,22 @@ def posterior_probabilities(h, X):
             dec_scores = np.vstack([-dec_scores, dec_scores]).T
         P = scipy.special.softmax(dec_scores, axis=1)
     return P
+
+
+def cal_error(Pte, yte):
+    expected_cal_error = Ece(adaptive_bins=True, n_bins=15, p=2, classwise=False)
+
+    logits = prob2logits(Pte)
+    ece = expected_cal_error(
+        logits=logits,
+        labels=torch.from_numpy(yte),
+    ).item()
+
+    return ece * 100
+
+
+def prob2logits(P, asnumpy=False):
+    logits = torch.log(torch.from_numpy(P))
+    if asnumpy:
+        logits = logits.numpy()
+    return logits
