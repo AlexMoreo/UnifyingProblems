@@ -1,32 +1,21 @@
-import itertools as IT
 from copy import deepcopy
 from typing import Callable
 
-import numpy as np
-import quapy as qp
-from quapy.data.base import LabelledCollection
-from quapy.method.aggregative import AggregativeQuantifier, BaseQuantifier, DistributionMatchingY, PACC, ACC
-from quapy.protocol import UPP, AbstractProtocol
-from sklearn.base import BaseEstimator
+from quapy.method.aggregative import AggregativeQuantifier, DistributionMatchingY, PACC, ACC
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import cross_val_score
 import numpy as np
 import scipy
 
-
-import itertools as IT
 from abc import ABC, abstractmethod
-from typing import List
 
 from quapy.data.base import LabelledCollection
 from quapy.protocol import AbstractProtocol
 import quapy.functional as F
 from sklearn.base import BaseEstimator
-from typing_extensions import override
 
 from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration
-from util import posterior_probabilities
+from util import posterior_probabilities, accuracy, accuracy_from_contingency_table
 
 
 # Adapted from https://github.com/lorenzovolpi/QuAcc/blob/devel
@@ -63,6 +52,19 @@ class ClassifierAccuracyPrediction(ABC):
         :return: float, predicted accuracy
         """
         ...
+
+
+class NaiveIID(ClassifierAccuracyPrediction):
+
+    def __init__(self, classifier: BaseEstimator):
+        super().__init__(classifier)
+
+    def fit(self, X, y):
+        y_hat = self.classify(X)
+        self.estim_acc = accuracy(y_true=y, y_pred=y_hat)
+
+    def predict(self, X) -> float:
+        return self.estim_acc
 
 
 class ATC(ClassifierAccuracyPrediction):
@@ -135,8 +137,8 @@ class DoC(ClassifierAccuracyPrediction):
         P = posteriors
         mc = max_conf(P)
         pred_labels = np.argmax(P, axis=-1)
-        accuracy = (y == pred_labels).mean()
-        return mc, accuracy
+        acc = accuracy(y, pred_labels)
+        return mc, acc
 
     def _doc(self, mc1, mc2):
         return mc2.mean() - mc1.mean()
@@ -386,16 +388,12 @@ class PACC2CAP(ClassifierAccuracyPrediction):
         return acc_pred
 
 
-def accuracy_from_contingency_table(ct):
-    return np.diagonal(ct).sum() / ct.sum()
-
-
 class LEAP(ClassifierAccuracyPrediction):
 
     def __init__(self,
                  classifier,
                  q_class: AggregativeQuantifier = ACC(),
-                 acc_fn: Callable=accuracy_from_contingency_table):
+                 acc_fn: Callable= accuracy_from_contingency_table):
         super().__init__(classifier)
         self.q_class = q_class
         self.acc_fn = acc_fn

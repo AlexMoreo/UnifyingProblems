@@ -14,18 +14,11 @@ import numpy as np
 
 from model.quantifiers import ATC2Quant, DoC2Quant, LasCal2Quant, PACCLasCal, EMQLasCal
 
-REPEATS = 10
+REPEATS = 100
 result_dir = f'results/quantification/label_shift/repeats_{REPEATS}'
 os.makedirs(result_dir, exist_ok=True)
 
-# result_path = 'quantification_label_shift.csv'
-# qp.util.create_parent_dir(result_path)
-
-results = []
-
-# datasets_selected = qp.datasets.UCI_BINARY_DATASETS[:10]
 datasets_selected = datasets(top_length_k=10)
-
 
 def new_labelshift_protocol(X, y, classes):
     lc = LabelledCollection(X, y, classes=classes)
@@ -63,13 +56,13 @@ def fit_quantifier(quant, train, val):
 print('Datasets:', datasets_selected)
 print('Repeats:', REPEATS)
 
-pbar = tqdm(datasets_selected, total=len(datasets_selected))
 all_results = []
+
+pbar = tqdm(datasets_selected, total=len(datasets_selected))
 for dataset in pbar:
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
-
     train, test = data.train_test
     train_prev = train.prevalence()
 
@@ -83,7 +76,6 @@ for dataset in pbar:
     for name, quant in quantifiers(classifier=h):
         result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
         if os.path.exists(result_method_dataset_path):
-            # print(f'results {result_method_dataset_path} already exist; skipping')
             report = pd.read_csv(result_method_dataset_path)
         else:
             fit_quantifier(quant, train, val)

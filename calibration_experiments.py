@@ -1,105 +1,112 @@
+from sklearn.linear_model import LogisticRegression
+import pandas as pd
+import numpy as np
+from model.classifier_calibrators import *
+from tqdm import tqdm
+import quapy as qp
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import DistributionMatchingY
 from quapy.protocol import UPP
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_predict
-import torch
-import numpy as np
-import quapy as qp
-from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration, HeadToTailCalibrator, CpcsCalibrator
-from tqdm import tqdm
+from util import cal_error, datasets
+import os
+from os.path import join
 
-from util import cal_error
+"""
+Methods:
+- Naive (uncal) [baseline]- 
+- Lascal [a proper method from calibration, for label shift]
+- TransCal [a proper method from calibration, for covariate?]
+- Cpcs [a proper method from calibration, for covariate?]
+- HeadToTail [a proper method from calibration, for covariate and long-tailed distributions]
+- HDC [a method from quantification (which works very well)]
+- Missing: [a method from CAP, qué tal un LEAP?]
+
+"""
+
+# There should be clear whether Xva, Pva, yva is representative from P or from Q
+
+REPEATS = 100
+result_dir = f'results/calibration/label_shift/repeats_{REPEATS}'
+os.makedirs(result_dir, exist_ok=True)
+
+datasets_selected = datasets(top_length_k=10)
 
 
+def calibration_methods(classifier, Pva, yva, train):
+    yield 'Uncal', UncalibratedWrap()
+    yield 'CPCS', CpcsCalibrator()
+    yield 'Head2Tail', HeadToTailCalibrator(verbose=False)
+    yield 'TransCal', TransCalCalibrator()
+    yield 'LasCal', LasCalCalibration()
+
+    dm = DistributionMatchingY(classifier=classifier, nbins=10)
+    preclassified = LabelledCollection(Pva, yva)
+    dm.aggregation_fit(classif_predictions=preclassified, data=train)
+    yield 'HDcal', HellingerDistanceCalibration(dm)
 
 
+def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
+    if isinstance(model, CalibratorSimple):
+        return model.calibrate(Pte)
+    elif isinstance(model, CalibratorSourceTarget):
+        return model.calibrate(Pva, yva, Pte)
+    elif isinstance(model, CalibratorCompound):
+        return model.calibrate(Xtr, ytr, Xva, Pva, yva, Xte, Pte)
+    else:
+        raise ValueError(f'unrecognized calibrator method {model}')
 
-uncal_ECE=[]
-head2tail_ECE =[]
-lascal_ECE =[]
-lascal_logit_ECE=[]
-hdc_ECE = []
-for dataset in qp.datasets.UCI_BINARY_DATASETS[:1]:
+all_results = []
+
+pbar = tqdm(datasets_selected, total=len(datasets_selected))
+for dataset in pbar:
+    pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
     train, test = data.train_test
+    train_prev = train.prevalence()
+
+    train, val = train.split_stratified(0.5, random_state=0)
 
     Xtr, ytr = train.Xy
 
     lr = LogisticRegression()
-    Ptr = cross_val_predict(lr, Xtr, ytr, cv=5, n_jobs=-1, method='predict_proba')
     lr.fit(Xtr, ytr)
 
-    cpcs = CpcsCalibrator()
-    cpcs.fit(Ptr, ytr)
+    Xva, yva = val.Xy
+    Pva = lr.predict_proba(Xva)
 
-    dm = DistributionMatchingY(classifier=lr, nbins=10)
-    preclassified = LabelledCollection(Ptr, ytr)
-    dm.aggregation_fit(classif_predictions=preclassified, data=train)
-    hdc = HellingerDistanceCalibration(dm)
+    # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
+    app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
 
-    uncal_ece=[]
-    head2tail_ece = []
-    lascal_ece=[]
-    lascal_logit_ece=[]
-    hdc_ece = []
+    for name, calibrator in calibration_methods(lr, Pva, yva, train):
+        result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
+        if os.path.exists(result_method_dataset_path):
+            report = pd.read_csv(result_method_dataset_path)
+        else:
+            method_dataset_results = []
+            for id, test_shifted in tqdm(enumerate(app()), total=app.total()):
+                Xte, yte = test_shifted.Xy
+                Pte = lr.predict_proba(Xte)
 
-    app = UPP(test, sample_size=len(test), repeats=50, return_type='labelled_collection')
-    for test_shifted in tqdm(app(), total=app.total()):
-        Xte, yte = test_shifted.Xy
-        Pte = lr.predict_proba(Xte)
+                Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
+                ece_cal = cal_error(Pte_cal, yte)
 
-        ece = cal_error(Pte, yte)
-        uncal_ece.append(ece)
+                result={
+                    'dataset': dataset,
+                    'id': id,
+                    'method': name,
+                    'shift': qp.error.ae(test_shifted.prevalence(), train_prev),
+                    'ece': ece_cal
+                }
+                method_dataset_results.append(result)
+            report = pd.DataFrame(method_dataset_results)
+            report.to_csv(result_method_dataset_path, index=False)
 
-        head2tail = HeadToTailCalibrator(verbose=True)
-        Pte_cal = head2tail.predict_proba(Ptr, ytr, Xtr, Ptr, ytr, Pte)
-        # Pte_cal = cpcs.predict_proba(Pte)
-        ece_cal = cal_error(Pte_cal, yte)
-        head2tail_ece.append(ece_cal)
+        all_results.append(report)
 
-        lasCal = LasCalCalibration()
-        Pte_cal = lasCal.predict_proba(Ptr, ytr, Pte)
-        ece_cal = cal_error(Pte_cal, yte)
-        lascal_ece.append(ece_cal)
-
-        Pte_hdc = hdc.predict_proba(Pte)
-        ece_hdc = cal_error(Pte_hdc, yte)
-        hdc_ece.append(ece_hdc)
-
-        Str = prob2logits(Ptr, asnumpy=True)
-        Ste = prob2logits(Pte, asnumpy=True)
-        Pte_cal = lasCal.predict_proba(Str, ytr, Ste)
-        ece_cal = cal_error(Pte_cal, yte)
-        lascal_logit_ece.append(ece_cal)
-
-    uncal_ece = np.mean(uncal_ece)
-    head2tail_ece = np.mean(head2tail_ece)
-    lascal_ece = np.mean(lascal_ece)
-    lascal_logit_ece = np.mean(lascal_logit_ece)
-    hdc_ece = np.mean(hdc_ece)
-
-    uncal_ECE.append(uncal_ece)
-    head2tail_ECE.append(head2tail_ece)
-    lascal_ECE.append(lascal_ece)
-    lascal_logit_ECE.append(lascal_ece)
-    hdc_ECE.append(hdc_ece)
-
-    print()
-    print(dataset)
-    print(f'uncalibrated ECE = {uncal_ece:.4f}')
-    print(f'Head2Tail ECE = {head2tail_ece:.4f}')
-    print(f'LasCal ECE = {lascal_ece:.4f}')
-    print(f'LasCal(logit) ECE = {lascal_logit_ece:.4f}')
-    print(f'HDC ECE = {hdc_ece:.4f}')
-
-
-print('*'*80)
-print('End:')
-print(f'uncalibrated ECE = {np.mean(uncal_ECE):.4f}')
-print(f'Head2Tail ECE = {np.mean(head2tail_ECE):.4f}')
-print(f'LasCal ECE = {np.mean(lascal_ECE):.4f}')
-print(f'LasCal(logit) ECE = {np.mean(lascal_logit_ECE):.4f}')
-print(f'HDC ECE = {np.mean(hdc_ECE):.4f}')
+df = pd.concat(all_results)
+pivot = df.pivot_table(index='dataset', columns='method', values='ece')
+print(df)
+print(pivot)
+print(pivot.mean(axis=0))

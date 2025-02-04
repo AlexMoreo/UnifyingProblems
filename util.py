@@ -46,3 +46,11 @@ def prob2logits(P, asnumpy=False):
     if asnumpy:
         logits = logits.numpy()
     return logits
+
+
+def accuracy(y_true, y_pred):
+    return (y_true == y_pred).mean()
+
+
+def accuracy_from_contingency_table(ct):
+    return np.diagonal(ct).sum() / ct.sum()

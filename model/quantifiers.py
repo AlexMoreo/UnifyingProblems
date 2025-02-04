@@ -170,7 +170,7 @@ class EMQLasCal(EMQ):
         Ptr = torch.from_numpy(self.Ptr)
         ytr = torch.from_numpy(self.ytr)
         P_uncal = torch.from_numpy(classif_predictions)
-        temperature = lascal(Ptr, ytr, P_uncal)
+        temperature = lascal_fn(Ptr, ytr, P_uncal)
         Ptr = softmax(self.Ptr / temperature, axis=1)
         P_calib = softmax(P_uncal / temperature, axis=1)
         fit_data = LabelledCollection(Ptr, self.ytr)
@@ -178,7 +178,8 @@ class EMQLasCal(EMQ):
         return super().aggregate(P_calib)
 
 
-def lascal(Str, ytr, Ste):
+# local (simplified) copy of lascal.post_hoc_calibration.calibrator:lascal
+def lascal_fn(Str, ytr, Ste):
     import torch
     weights_method = "rlls-hard"
     p = 2
