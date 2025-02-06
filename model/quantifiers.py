@@ -5,7 +5,7 @@ import quapy as qp
 import quapy.functional as F
 import torch
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import AggregativeSoftQuantifier, PACC, EMQ
+from quapy.method.aggregative import AggregativeSoftQuantifier, PACC, EMQ, PCC
 from quapy.method.base import BaseQuantifier
 from quapy.protocol import AbstractProtocol
 from sklearn.base import BaseEstimator
@@ -115,7 +115,7 @@ class LasCal2Quant(BaseQuantifier):
 
     def quantify(self, X):
         P_uncal = posterior_probabilities(self.classifier, X)
-        P_calib = self.lascal.predict_proba(self.Ptr, self.ytr, P_uncal)
+        P_calib = self.lascal.calibrate(self.Ptr, self.ytr, P_uncal)
         prev_estim = np.mean(P_calib, axis=0)
         return prev_estim
 
@@ -221,3 +221,5 @@ def lascal_fn(Str, ytr, Ste):
             optim_temp = temp
 
     return optim_temp
+
+

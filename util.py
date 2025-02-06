@@ -41,6 +41,12 @@ def cal_error(Pte, yte):
     return ece * 100
 
 
+
+def cap_error(acc_true, acc_estim):
+    return abs(acc_true-acc_estim)
+
+
+
 def prob2logits(P, asnumpy=False):
     logits = torch.log(torch.from_numpy(P))
     if asnumpy:

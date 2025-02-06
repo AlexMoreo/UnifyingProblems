@@ -1,4 +1,6 @@
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.frozen import FrozenEstimator
 import pandas as pd
 import numpy as np
 from model.classifier_calibrators import *
@@ -7,7 +9,7 @@ import quapy as qp
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import DistributionMatchingY
 from quapy.protocol import UPP
-
+from dataclasses import dataclass, asdict
 from util import cal_error, datasets
 import os
 from os.path import join
@@ -32,9 +34,21 @@ os.makedirs(result_dir, exist_ok=True)
 
 datasets_selected = datasets(top_length_k=10)
 
+@dataclass
+class ResultRow:
+    dataset: str
+    id: int
+    method: str
+    shift: float
+    ece: float
+
 
 def calibration_methods(classifier, Pva, yva, train):
     yield 'Uncal', UncalibratedWrap()
+    yield 'Platt', PlattScaling().fit(Pva, yva)
+    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    yield 'EM', EM(train.prevalence())
+    yield 'EM-BCTS', EMBCTSCalibration()
     yield 'CPCS', CpcsCalibrator()
     yield 'Head2Tail', HeadToTailCalibrator(verbose=False)
     yield 'TransCal', TransCalCalibrator()
@@ -56,6 +70,7 @@ def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
     else:
         raise ValueError(f'unrecognized calibrator method {model}')
 
+
 all_results = []
 
 pbar = tqdm(datasets_selected, total=len(datasets_selected))
@@ -65,7 +80,6 @@ for dataset in pbar:
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
     train, test = data.train_test
     train_prev = train.prevalence()
-
     train, val = train.split_stratified(0.5, random_state=0)
 
     Xtr, ytr = train.Xy
@@ -85,21 +99,19 @@ for dataset in pbar:
             report = pd.read_csv(result_method_dataset_path)
         else:
             method_dataset_results = []
-            for id, test_shifted in tqdm(enumerate(app()), total=app.total()):
+            for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}'):
                 Xte, yte = test_shifted.Xy
                 Pte = lr.predict_proba(Xte)
 
                 Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
+                print(f'Pte_cal={Pte_cal.shape}')
+                print(f'yte={yte[:10]}')
                 ece_cal = cal_error(Pte_cal, yte)
 
-                result={
-                    'dataset': dataset,
-                    'id': id,
-                    'method': name,
-                    'shift': qp.error.ae(test_shifted.prevalence(), train_prev),
-                    'ece': ece_cal
-                }
-                method_dataset_results.append(result)
+                shift = qp.error.ae(test_shifted.prevalence(), train_prev)
+                result = ResultRow(dataset=dataset, id=id, method=name, shift=shift, ece=ece_cal)
+                method_dataset_results.append(asdict(result))
+
             report = pd.DataFrame(method_dataset_results)
             report.to_csv(result_method_dataset_path, index=False)
 

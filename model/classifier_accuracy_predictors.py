@@ -62,6 +62,7 @@ class NaiveIID(ClassifierAccuracyPrediction):
     def fit(self, X, y):
         y_hat = self.classify(X)
         self.estim_acc = accuracy(y_true=y, y_pred=y_hat)
+        return self
 
     def predict(self, X) -> float:
         return self.estim_acc
@@ -235,8 +236,8 @@ class LasCal2CAP(ClassifierAccuracyPrediction):
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
-        cal_pos = lascal.predict_proba(self.Ppos, self.ypos, posteriors[y_hat==1])
-        cal_neg = lascal.predict_proba(self.Pneg, self.yneg, posteriors[y_hat==0])
+        cal_pos = lascal.calibrate(self.Ppos, self.ypos, posteriors[y_hat==1])
+        cal_neg = lascal.calibrate(self.Pneg, self.yneg, posteriors[y_hat==0])
 
         n_instances = posteriors.shape[0]
 
@@ -284,8 +285,8 @@ class HDC2CAP(ClassifierAccuracyPrediction):
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
-        cal_pos = self.cal_pos.predict_proba(posteriors[y_hat==1])
-        cal_neg = self.cal_neg.predict_proba(posteriors[y_hat==0])
+        cal_pos = self.cal_pos.calibrate(posteriors[y_hat==1])
+        cal_neg = self.cal_neg.calibrate(posteriors[y_hat==0])
 
         n_instances = posteriors.shape[0]
         acc_pred = (cal_pos[:,1].sum() + cal_neg[:,0].sum()) / n_instances
@@ -313,11 +314,9 @@ class PACC2CAP_(ClassifierAccuracyPrediction):
         yneg = y[y_hat == 0]
         # Pneg = posteriors[y_hat == 0]
 
-        self.q_pos = PACC()
-        self.q_pos.fit(LabelledCollection(Cov_pos, ypos))
+        self.q_pos = PACC().fit(LabelledCollection(Cov_pos, ypos))
 
-        self.q_neg = PACC()
-        self.q_neg.fit(LabelledCollection(Cov_neg, yneg))
+        self.q_neg = PACC().fit(LabelledCollection(Cov_neg, yneg))
 
         return self
 

@@ -2,13 +2,17 @@ import numpy as np
 import torch
 from quapy.data import LabelledCollection
 from sklearn.base import BaseEstimator
+from sklearn.calibration import _SigmoidCalibration
+from sklearn.isotonic import IsotonicRegression
 
+import util
 from calibrator import cal_acc_error, get_weight_feature_space
 from lascal import Calibrator
 from methods import HeadToTail, Cpcs, TransCal
-from quapy.method.aggregative import DistributionMatchingY
+from quapy.method.aggregative import DistributionMatchingY, EMQ
 from scipy.special import softmax
 from abc import ABC, abstractmethod
+from sklearn.calibration import _fit_calibrator
 
 EPSILON = 1e-7
 
@@ -40,6 +44,41 @@ class UncalibratedWrap(CalibratorSimple):
             return softmax(Z, axis=-1)
         else:
             return Z
+
+
+class PlattScaling(CalibratorSimple):
+
+    def __init__(self):
+        pass
+
+    def fit(self, Zva, yva):
+        self.calibrator = _SigmoidCalibration()
+        self.calibrator.fit(Zva[:,1], yva)
+        return self
+
+    def calibrate(self, Z):
+        if not hasattr(self, 'calibrator'):
+            raise RuntimeError('calibrate called before fit')
+        calibrated_pos = self.calibrator.predict(Z[:,1])
+        calibrated = np.asarray([1-calibrated_pos, calibrated_pos]).T
+        return calibrated
+
+class IsotonicCalibration(CalibratorSimple):
+
+    def __init__(self):
+        pass
+
+    def fit(self, Zva, yva):
+        self.calibrator = IsotonicRegression(out_of_bounds="clip")
+        self.calibrator.fit(Zva[:, 1], yva)
+        return self
+
+    def calibrate(self, Z):
+        if not hasattr(self, 'calibrator'):
+            raise RuntimeError('calibrate called before fit')
+        calibrated_pos = self.calibrator.predict(Z[:, 1])
+        calibrated = np.asarray([1 - calibrated_pos, calibrated_pos]).T
+        return calibrated
 
 # ----------------------------------------------------------
 # Under Label Shift
@@ -84,6 +123,54 @@ class LasCalCalibration(CalibratorSourceTarget):
         return Pte_calib
 
 
+class EMBCTSCalibration(CalibratorSourceTarget):
+
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+
+    def calibrate(self, Zsrc, ysrc, Ztgt):
+
+        calibrator = Calibrator(
+            experiment_path=None,
+            verbose=self.verbose,
+            covariate=False,
+        )
+
+        Zsrc = torch.from_numpy(Zsrc)
+        Ztgt = torch.from_numpy(Ztgt)
+        ysrc = torch.from_numpy(ysrc)
+        yte = None
+
+        source_agg = {
+            'y_logits': Zsrc,
+            'y_true': ysrc
+        }
+        target_agg = {
+            'y_logits': Ztgt,
+            'y_true': yte
+        }
+
+        try:
+            calibrated_agg = calibrator.calibrate(
+                method_name='em_alexandari',
+                source_agg=source_agg,
+                target_agg=target_agg,
+                train_agg=None,
+            )
+
+            y_logits = calibrated_agg['target']['y_logits']
+            Pte_calib = y_logits.softmax(-1).numpy()
+            print('good')
+            return Pte_calib
+        except AssertionError:
+            print('assertion')
+            Pte = UncalibratedWrap().calibrate(Zsrc.numpy())
+            print(Zsrc.shape)
+            print(Pte.shape)
+            return Pte
+
+
+
 class HellingerDistanceCalibration(CalibratorSimple):
 
     def __init__(self, hdy:DistributionMatchingY):
@@ -109,6 +196,14 @@ class HellingerDistanceCalibration(CalibratorSimple):
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
 
+class EM(CalibratorSimple):
+    def __init__(self, train_prevalence):
+        self.emq = EMQ()
+        self.train_prevalence = train_prevalence
+
+    def calibrate(self, Z):
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=Z)
+        return posteriors
 
 # ----------------------------------------------------------
 # Under Covariate Shift
@@ -141,7 +236,7 @@ class TransCalCalibrator(CalibratorCompound):
         Pte_recalib = torch.from_numpy(y_logits).softmax(-1).numpy()
         return Pte_recalib
 
-
+# CPCS [Park et al., 2020]
 class CpcsCalibrator(CalibratorCompound):
 
     def __init__(self):
@@ -181,6 +276,6 @@ class HeadToTailCalibrator(CalibratorCompound):
             print(f"Temperature found with HeadToTail is: {optim_temp[0]}")
 
         y_logits = Zte / optim_temp
-        # Pte_recalib = y_logits.softmax(-1).numpy()
         Pte_recalib = softmax(y_logits, axis=-1)
         return Pte_recalib
+

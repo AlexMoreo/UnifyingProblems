@@ -1,6 +1,7 @@
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC
+from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML
 from quapy.method.base import BaseQuantifier
+from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from quapy.protocol import UPP, ArtificialPrevalenceProtocol
 from sklearn.linear_model import LogisticRegression
 import pandas as pd
@@ -12,13 +13,14 @@ import quapy as qp
 from tqdm import tqdm
 import numpy as np
 
-from model.quantifiers import ATC2Quant, DoC2Quant, LasCal2Quant, PACCLasCal, EMQLasCal
+from model.quantifiers import *
 
 REPEATS = 100
 result_dir = f'results/quantification/label_shift/repeats_{REPEATS}'
 os.makedirs(result_dir, exist_ok=True)
 
 datasets_selected = datasets(top_length_k=10)
+
 
 def new_labelshift_protocol(X, y, classes):
     lc = LabelledCollection(X, y, classes=classes)
@@ -33,15 +35,17 @@ def new_labelshift_protocol(X, y, classes):
 
 
 def quantifiers(classifier):
+    yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
     yield 'CC', CC(classifier)
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
     yield 'EMQ', EMQ(classifier)
+    yield 'KDEy', KDEyML(classifier)
     yield 'ATC-q', ATC2Quant(classifier)
     yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_labelshift_protocol)
-    yield 'LasCal-q', LasCal2Quant(classifier)
-    yield 'PACC(LasCal)', PACCLasCal(classifier)
-    yield 'EMQ(LasCal)', EMQLasCal(classifier)
+    # yield 'LasCal-q', LasCal2Quant(classifier)
+    # yield 'PACC(LasCal)', PACCLasCal(classifier)
+    # yield 'EMQ(LasCal)', EMQLasCal(classifier)
 
 
 def fit_quantifier(quant, train, val):
