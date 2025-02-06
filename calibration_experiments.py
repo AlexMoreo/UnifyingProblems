@@ -1,6 +1,5 @@
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
-from sklearn.frozen import FrozenEstimator
 import pandas as pd
 import numpy as np
 from model.classifier_calibrators import *
@@ -45,19 +44,20 @@ class ResultRow:
 
 def calibration_methods(classifier, Pva, yva, train):
     yield 'Uncal', UncalibratedWrap()
-    yield 'Platt', PlattScaling().fit(Pva, yva)
-    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    # yield 'Platt', PlattScaling().fit(Pva, yva)
+    # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'EM', EM(train.prevalence())
     yield 'EM-BCTS', EMBCTSCalibration()
-    yield 'CPCS', CpcsCalibrator()
-    yield 'Head2Tail', HeadToTailCalibrator(verbose=False)
-    yield 'TransCal', TransCalCalibrator()
-    yield 'LasCal', LasCalCalibration()
+    # yield 'CPCS', CpcsCalibrator()
+    # yield 'Head2Tail', HeadToTailCalibrator(verbose=False)
+    # yield 'TransCal', TransCalCalibrator()
+    yield 'LasCal-S', LasCalCalibration(from_probabilities=True) #convert them to logits
+    yield 'LasCal-P', LasCalCalibration(from_probabilities=False) #do not convert to logits
 
-    dm = DistributionMatchingY(classifier=classifier, nbins=10)
-    preclassified = LabelledCollection(Pva, yva)
-    dm.aggregation_fit(classif_predictions=preclassified, data=train)
-    yield 'HDcal', HellingerDistanceCalibration(dm)
+    # dm = DistributionMatchingY(classifier=classifier, nbins=10)
+    # preclassified = LabelledCollection(Pva, yva)
+    # dm.aggregation_fit(classif_predictions=preclassified, data=train)
+    # yield 'HDcal', HellingerDistanceCalibration(dm)
 
 
 def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
@@ -75,6 +75,9 @@ all_results = []
 
 pbar = tqdm(datasets_selected, total=len(datasets_selected))
 for dataset in pbar:
+    if dataset in ['ctg.1', 'spambase']:
+        print('SKIPPING CTG.1, SPAMBASE')
+        continue
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
@@ -104,8 +107,8 @@ for dataset in pbar:
                 Pte = lr.predict_proba(Xte)
 
                 Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
-                print(f'Pte_cal={Pte_cal.shape}')
-                print(f'yte={yte[:10]}')
+                # print(f'Pte_cal={Pte_cal.shape}')
+                # print(f'yte={yte[:10]}')
                 ece_cal = cal_error(Pte_cal, yte)
 
                 shift = qp.error.ae(test_shifted.prevalence(), train_prev)

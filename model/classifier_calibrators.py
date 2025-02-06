@@ -86,8 +86,9 @@ class IsotonicCalibration(CalibratorSimple):
 
 class LasCalCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, from_probabilities=True):
         self.verbose = verbose
+        self.from_probabilities = from_probabilities
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
@@ -101,6 +102,10 @@ class LasCalCalibration(CalibratorSourceTarget):
         Ztgt = torch.from_numpy(Ztgt)
         ysrc = torch.from_numpy(ysrc)
         yte = None
+
+        if self.from_probabilities:
+            Zsrc = torch.log(Zsrc)
+            Ztgt = torch.log(Ztgt)
 
         source_agg = {
             'y_logits': Zsrc,
@@ -125,8 +130,9 @@ class LasCalCalibration(CalibratorSourceTarget):
 
 class EMBCTSCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, from_probabilities=True):
         self.verbose = verbose
+        self.from_probabilities = from_probabilities
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
@@ -140,6 +146,10 @@ class EMBCTSCalibration(CalibratorSourceTarget):
         Ztgt = torch.from_numpy(Ztgt)
         ysrc = torch.from_numpy(ysrc)
         yte = None
+
+        if self.from_probabilities:
+            Zsrc =  torch.log(Zsrc)
+            Ztgt = torch.log(Ztgt)
 
         source_agg = {
             'y_logits': Zsrc,
@@ -160,13 +170,13 @@ class EMBCTSCalibration(CalibratorSourceTarget):
 
             y_logits = calibrated_agg['target']['y_logits']
             Pte_calib = y_logits.softmax(-1).numpy()
-            print('good')
+            # print('good')
             return Pte_calib
         except AssertionError:
-            print('assertion')
+            # print('assertion')
             Pte = UncalibratedWrap().calibrate(Zsrc.numpy())
-            print(Zsrc.shape)
-            print(Pte.shape)
+            # print(Zsrc.shape)
+            # print(Pte.shape)
             return Pte
 
 
