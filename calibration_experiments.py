@@ -48,16 +48,19 @@ def calibration_methods(classifier, Pva, yva, train):
     # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'EM', EM(train.prevalence())
     yield 'EM-BCTS', EMBCTSCalibration()
-    # yield 'CPCS', CpcsCalibrator()
-    # yield 'Head2Tail', HeadToTailCalibrator(verbose=False)
-    # yield 'TransCal', TransCalCalibrator()
-    yield 'LasCal-S', LasCalCalibration(from_probabilities=True) #convert them to logits
-    yield 'LasCal-P', LasCalCalibration(from_probabilities=False) #do not convert to logits
+    yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
+    # yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
+    yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True)
+    # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False)
+    yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
+    # yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
+    yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
+    # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
-    # dm = DistributionMatchingY(classifier=classifier, nbins=10)
-    # preclassified = LabelledCollection(Pva, yva)
-    # dm.aggregation_fit(classif_predictions=preclassified, data=train)
-    # yield 'HDcal', HellingerDistanceCalibration(dm)
+    dm = DistributionMatchingY(classifier=classifier, nbins=10)
+    preclassified = LabelledCollection(Pva, yva)
+    dm.aggregation_fit(classif_predictions=preclassified, data=val)
+    yield 'HDcal', HellingerDistanceCalibration(dm)
 
 
 def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):

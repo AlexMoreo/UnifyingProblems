@@ -6,7 +6,4 @@
 - Add CAP diagonal plots, and error by shift
 - Add calibration via kde distribution matching [maybe no]
 - Add calibration-extrapolation exactly as defined in their paper
-- Add baselines:
-    Calibration: EMQ-based, some iid (e.g., Platt Scalling, Empirical binning?)
-    CAP: kFCV o train/val mejor
 - Document everything

@@ -31,6 +31,14 @@ class CalibratorCompound(ABC):
     def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Zte):
         ...
 
+def np2tensor(scores, probability_to_logit=False):
+    scores = torch.from_numpy(scores)
+    if probability_to_logit:
+        scores = torch.log(scores)
+    return scores
+
+def np_prob2logit(prob):
+    return np2tensor(prob, probability_to_logit=True).numpy()
 
 # ----------------------------------------------------------
 # Basic wrap that simply returns the posterior probabilities
@@ -63,6 +71,7 @@ class PlattScaling(CalibratorSimple):
         calibrated = np.asarray([1-calibrated_pos, calibrated_pos]).T
         return calibrated
 
+
 class IsotonicCalibration(CalibratorSimple):
 
     def __init__(self):
@@ -80,15 +89,16 @@ class IsotonicCalibration(CalibratorSimple):
         calibrated = np.asarray([1 - calibrated_pos, calibrated_pos]).T
         return calibrated
 
+
 # ----------------------------------------------------------
 # Under Label Shift
 # ----------------------------------------------------------
 
 class LasCalCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False, from_probabilities=True):
+    def __init__(self, verbose=False, prob2logits=True):
         self.verbose = verbose
-        self.from_probabilities = from_probabilities
+        self.prob2logits = prob2logits
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
@@ -98,14 +108,10 @@ class LasCalCalibration(CalibratorSourceTarget):
             covariate=False,
         )
 
-        Zsrc = torch.from_numpy(Zsrc)
-        Ztgt = torch.from_numpy(Ztgt)
-        ysrc = torch.from_numpy(ysrc)
+        Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
+        Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
+        ysrc = np2tensor(ysrc)
         yte = None
-
-        if self.from_probabilities:
-            Zsrc = torch.log(Zsrc)
-            Ztgt = torch.log(Ztgt)
 
         source_agg = {
             'y_logits': Zsrc,
@@ -130,9 +136,9 @@ class LasCalCalibration(CalibratorSourceTarget):
 
 class EMBCTSCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False, from_probabilities=True):
+    def __init__(self, verbose=False, prob2logits=True):
         self.verbose = verbose
-        self.from_probabilities = from_probabilities
+        self.prob2logits = prob2logits
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
@@ -142,14 +148,10 @@ class EMBCTSCalibration(CalibratorSourceTarget):
             covariate=False,
         )
 
-        Zsrc = torch.from_numpy(Zsrc)
-        Ztgt = torch.from_numpy(Ztgt)
-        ysrc = torch.from_numpy(ysrc)
+        Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
+        Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
+        ysrc = np2tensor(ysrc)
         yte = None
-
-        if self.from_probabilities:
-            Zsrc =  torch.log(Zsrc)
-            Ztgt = torch.log(Ztgt)
 
         source_agg = {
             'y_logits': Zsrc,
@@ -206,6 +208,7 @@ class HellingerDistanceCalibration(CalibratorSimple):
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
 
+
 class EM(CalibratorSimple):
     def __init__(self, train_prevalence):
         self.emq = EMQ()
@@ -221,12 +224,14 @@ class EM(CalibratorSimple):
 # TransCal [Wang et al., 2020]
 class TransCalCalibrator(CalibratorCompound):
 
-    def __init__(self):
-        pass
+    def __init__(self, prob2logits=True):
+        self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Zte):
-        Zsrc = torch.from_numpy(Zsrc)
-        ysrc = torch.from_numpy(ysrc)
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+        Zsrc = np2tensor(Zsrc, self.prob2logits)
+        Ztgt = np2tensor(Ztgt, self.prob2logits)
+        ysrc = np2tensor(ysrc)
+
         optim_temp_source = Calibrator()._temperature_scale(
             logits=Zsrc,
             labels=ysrc
@@ -237,41 +242,49 @@ class TransCalCalibrator(CalibratorCompound):
         weight = get_weight_feature_space(Ftr, Fte, Fsrc)
         # Find optimal temp with TransCal
         optim_temp = TransCal().find_best_T(
-            Zte,
+            Ztgt.numpy(),
             weight,
             error_source_val,
             source_confidence.item(),
         )
-        y_logits = Zte / optim_temp
-        Pte_recalib = torch.from_numpy(y_logits).softmax(-1).numpy()
+        y_logits = Ztgt / optim_temp
+        Pte_recalib = y_logits.softmax(-1).numpy()
         return Pte_recalib
+
 
 # CPCS [Park et al., 2020]
 class CpcsCalibrator(CalibratorCompound):
 
-    def __init__(self):
-        pass
+    def __init__(self, prob2logits=True):
+        self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Zte):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+
+        Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
+        Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
+        ysrc = np2tensor(ysrc)
+
         weight = get_weight_feature_space(Ftr, Fte, Fsrc)
         # Find optimal temp with TransCal
-        optim_temp = Cpcs().find_best_T(
-            torch.from_numpy(Zsrc),
-            torch.from_numpy(ysrc),
-            weight
-        )
-        y_logits = Zte / optim_temp
-        Pte_recalib = torch.from_numpy(y_logits).softmax(-1).numpy()
+
+        optim_temp = Cpcs().find_best_T(Zsrc, ysrc, weight)
+        y_logits = Ztgt / optim_temp
+        Pte_recalib = y_logits.softmax(-1).numpy()
         return Pte_recalib
 
 
 # HeadToTail [Chen and Su, 2023]
 class HeadToTailCalibrator(CalibratorCompound):
 
-    def __init__(self, verbose):
+    def __init__(self, verbose=False, prob2logits=True):
         self.verbose = verbose
+        self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Zte):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+        if self.prob2logits:
+            Zsrc = np_prob2logit(Zsrc)
+            Ztgt = np_prob2logit(Ztgt)
+
         head_to_tail = HeadToTail(
             num_classes=2,
             features=Fsrc,
@@ -285,7 +298,7 @@ class HeadToTailCalibrator(CalibratorCompound):
         if self.verbose:
             print(f"Temperature found with HeadToTail is: {optim_temp[0]}")
 
-        y_logits = Zte / optim_temp
+        y_logits = Ztgt / optim_temp
         Pte_recalib = softmax(y_logits, axis=-1)
         return Pte_recalib
 
