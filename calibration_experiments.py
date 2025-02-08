@@ -61,6 +61,10 @@ def calibration_methods(classifier, Pva, yva, train):
     preclassified = LabelledCollection(Pva, yva)
     dm.aggregation_fit(classif_predictions=preclassified, data=val)
     yield 'HDcal', HellingerDistanceCalibration(dm)
+    yield 'HDcal-sm', HellingerDistanceCalibration(dm, smooth=True)
+    yield 'HDcal-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+    yield 'HDcal-sm-mono2', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+    yield 'HDcal-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
 
 
 def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):

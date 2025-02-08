@@ -185,8 +185,10 @@ class EMBCTSCalibration(CalibratorSourceTarget):
 
 class HellingerDistanceCalibration(CalibratorSimple):
 
-    def __init__(self, hdy:DistributionMatchingY):
+    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False):
         self.hdy = hdy
+        self.smooth = smooth
+        self.monotonicity = monotonicity
 
     def calibrate(self, Z):
         dm = self.hdy
@@ -201,10 +203,19 @@ class HellingerDistanceCalibration(CalibratorSimple):
         hist_pos = hist_pos * estim_prev[1] + EPSILON
         corrected_posteriors_bins = hist_pos / (hist_neg + hist_pos)
         corrected_posteriors_bins = np.concatenate(([0.], corrected_posteriors_bins, [1.]))
+
+        if self.monotonicity:
+            for i in range(1,nbins-1):
+                corrected_posteriors_bins[i] = max(corrected_posteriors_bins[i], corrected_posteriors_bins[i-1])
+        # if self.smooth:
+        #     corrected_posteriors_bins[1:-1]=np.mean(np.vstack([corrected_posteriors_bins[:-2], corrected_posteriors_bins[1:-1], corrected_posteriors_bins[2:]]), axis=0)
+
         x_coords = np.concatenate(
             ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
         uncalibrated_posteriors_pos = Z[:, 1]
         posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, corrected_posteriors_bins)
+        if self.smooth:
+            posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
 
