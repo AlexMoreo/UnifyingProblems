@@ -2,6 +2,13 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 import pandas as pd
 import numpy as np
+from sklearn.naive_bayes import GaussianNB
+from itertools import product
+
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+
 from model.classifier_calibrators import *
 from tqdm import tqdm
 import quapy as qp
@@ -12,6 +19,7 @@ from dataclasses import dataclass, asdict
 from util import cal_error, datasets
 import os
 from os.path import join
+from sklearn.metrics import brier_score_loss
 
 """
 Methods:
@@ -38,8 +46,10 @@ class ResultRow:
     dataset: str
     id: int
     method: str
+    classifier: str
     shift: float
     ece: float
+    brier: float
 
 
 def calibration_methods(classifier, Pva, yva, train):
@@ -47,24 +57,35 @@ def calibration_methods(classifier, Pva, yva, train):
     # yield 'Platt', PlattScaling().fit(Pva, yva)
     # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'EM', EM(train.prevalence())
-    yield 'EM-BCTS', EMBCTSCalibration()
+    # yield 'EM-BCTS', EMBCTSCalibration()
     yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
     # yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
     yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True)
     # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False)
     yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
     # yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
-    yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
+    # yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
     # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
-    dm = DistributionMatchingY(classifier=classifier, nbins=10)
-    preclassified = LabelledCollection(Pva, yva)
-    dm.aggregation_fit(classif_predictions=preclassified, data=val)
-    yield 'HDcal', HellingerDistanceCalibration(dm)
-    yield 'HDcal-sm', HellingerDistanceCalibration(dm, smooth=True)
-    yield 'HDcal-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
-    yield 'HDcal-sm-mono2', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
-    yield 'HDcal-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+    for nbins in [20, 25, 30, 35, 40]:
+        dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
+        preclassified = LabelledCollection(Pva, yva)
+        dm.aggregation_fit(classif_predictions=preclassified, data=val)
+        # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
+        # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
+        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+        # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
+        # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+    yield 'NaiveUncertain', NaiveUncertain()
+    yield 'NaiveTrain', NaiveUncertain(train_prev)
+
+
+def classifiers():
+    yield 'lr', LogisticRegression()
+    yield 'nb', GaussianNB()
+    # yield 'dt', DecisionTreeClassifier()
+    # yield 'svm', SVC()
+    yield 'mlp', MLPClassifier()
 
 
 def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
@@ -80,9 +101,10 @@ def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
 
 all_results = []
 
-pbar = tqdm(datasets_selected, total=len(datasets_selected))
-for dataset in pbar:
-    if dataset in ['ctg.1', 'spambase']:
+n_classifiers = len([c for _,c in classifiers()])
+pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
+for dataset, (cls_name, cls) in pbar:
+    if dataset in ['ctg.1', 'spambase', 'yeast']:
         print('SKIPPING CTG.1, SPAMBASE')
         continue
     pbar.set_description(f'running: {dataset}')
@@ -94,32 +116,32 @@ for dataset in pbar:
 
     Xtr, ytr = train.Xy
 
-    lr = LogisticRegression()
-    lr.fit(Xtr, ytr)
+    cls.fit(Xtr, ytr)
 
     Xva, yva = val.Xy
-    Pva = lr.predict_proba(Xva)
+    Pva = cls.predict_proba(Xva)
 
     # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
     app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
 
-    for name, calibrator in calibration_methods(lr, Pva, yva, train):
-        result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
+    for name, calibrator in calibration_methods(cls, Pva, yva, train):
+        result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
         else:
             method_dataset_results = []
             for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}'):
                 Xte, yte = test_shifted.Xy
-                Pte = lr.predict_proba(Xte)
+                Pte = cls.predict_proba(Xte)
 
                 Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
                 # print(f'Pte_cal={Pte_cal.shape}')
                 # print(f'yte={yte[:10]}')
                 ece_cal = cal_error(Pte_cal, yte)
+                brier_score = brier_score_loss(y_true=yte, y_proba=Pte_cal[:,1])
 
                 shift = qp.error.ae(test_shifted.prevalence(), train_prev)
-                result = ResultRow(dataset=dataset, id=id, method=name, shift=shift, ece=ece_cal)
+                result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, ece=ece_cal, brier=brier_score)
                 method_dataset_results.append(asdict(result))
 
             report = pd.DataFrame(method_dataset_results)
@@ -128,7 +150,19 @@ for dataset in pbar:
         all_results.append(report)
 
 df = pd.concat(all_results)
-pivot = df.pivot_table(index='dataset', columns='method', values='ece')
-print(df)
+pivot = df.pivot_table(index=['classifier'], columns='method', values='ece')
+# print(df)
 print(pivot)
-print(pivot.mean(axis=0))
+# print(pivot.mean(axis=0))
+
+pivot = df.pivot_table(index=['classifier'], columns='method', values='brier')
+# print(df)
+print(pivot)
+# print(pivot.mean(axis=0))
+
+df['cal']=df['ece']*df['brier']
+pivot = df.pivot_table(index=['classifier'], columns='method', values='cal')
+print(pivot)
+# print(pivot.mean(axis=0))
+
+

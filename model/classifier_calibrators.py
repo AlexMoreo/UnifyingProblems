@@ -185,9 +185,10 @@ class EMBCTSCalibration(CalibratorSourceTarget):
 
 class HellingerDistanceCalibration(CalibratorSimple):
 
-    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False):
+    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False, postsmooth=False):
         self.hdy = hdy
         self.smooth = smooth
+        self.postsmooth=postsmooth
         self.monotonicity = monotonicity
 
     def calibrate(self, Z):
@@ -201,20 +202,20 @@ class HellingerDistanceCalibration(CalibratorSimple):
         hist_pos = hist_pos.flatten()[::-1]
         hist_neg = hist_neg * estim_prev[0] + EPSILON
         hist_pos = hist_pos * estim_prev[1] + EPSILON
-        corrected_posteriors_bins = hist_pos / (hist_neg + hist_pos)
-        corrected_posteriors_bins = np.concatenate(([0.], corrected_posteriors_bins, [1.]))
+        calibration_map = hist_pos / (hist_neg + hist_pos)
+        calibration_map = np.concatenate(([0.], calibration_map, [1.]))
 
         if self.monotonicity:
             for i in range(1,nbins-1):
-                corrected_posteriors_bins[i] = max(corrected_posteriors_bins[i], corrected_posteriors_bins[i-1])
-        # if self.smooth:
-        #     corrected_posteriors_bins[1:-1]=np.mean(np.vstack([corrected_posteriors_bins[:-2], corrected_posteriors_bins[1:-1], corrected_posteriors_bins[2:]]), axis=0)
+                calibration_map[i] = max(calibration_map[i], calibration_map[i-1])
+        if self.smooth:
+            calibration_map[1:-1]=np.mean(np.vstack([calibration_map[:-2], calibration_map[1:-1], calibration_map[2:]]), axis=0)
 
         x_coords = np.concatenate(
             ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
         uncalibrated_posteriors_pos = Z[:, 1]
-        posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, corrected_posteriors_bins)
-        if self.smooth:
+        posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, calibration_map)
+        if self.postsmooth:
             posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
@@ -228,6 +229,19 @@ class EM(CalibratorSimple):
     def calibrate(self, Z):
         priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=Z)
         return posteriors
+
+
+class NaiveUncertain(CalibratorSimple):
+    def __init__(self, train_prev=None):
+        self.train_prev = train_prev
+
+    def calibrate(self, Z):
+        if self.train_prev is None:
+            uncertain = np.full_like(Z, fill_value=0.5)
+        else:
+            uncertain = np.tile(self.train_prev, (Z.shape[0],1))
+        return uncertain
+
 
 # ----------------------------------------------------------
 # Under Covariate Shift

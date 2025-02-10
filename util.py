@@ -30,7 +30,8 @@ def posterior_probabilities(h, X):
 
 
 def cal_error(Pte, yte):
-    expected_cal_error = Ece(adaptive_bins=True, n_bins=15, p=2, classwise=False)
+    # expected_cal_error = Ece(adaptive_bins=True, n_bins=15, p=2, classwise=False)
+    expected_cal_error = Ece(adaptive_bins=False, version='other', n_bins=15, p=2, classwise=False)
 
     logits = prob2logits(Pte)
     ece = expected_cal_error(
