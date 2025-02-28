@@ -43,14 +43,14 @@ def cap_methods(h:BaseEstimator, Xva, yva):
 
     # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(Xva, yva)
-    yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
     yield 'ATC', ATC(h).fit(Xva, yva)
-
     val_prot = UPP(val, sample_size=len(val), repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
+    yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
     # Calibration 2 CAP
-    yield 'LasCal-a', LasCal2CAP(classifier=h).fit(Xva, yva)
+    yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
+    yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(Xva, yva)
     yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
 
     # Quantification 2 CAP

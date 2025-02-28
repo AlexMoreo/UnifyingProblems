@@ -214,8 +214,9 @@ def smooth(prevalences, epsilon=1e-5, axis=None):
 
 class LasCal2CAP(ClassifierAccuracyPrediction):
 
-    def __init__(self, classifier: BaseEstimator):
+    def __init__(self, classifier: BaseEstimator, probs2logits=True):
         super().__init__(classifier)
+        self.probs2logits = probs2logits
 
     def fit(self, X, y):
         y_hat = self.classify(X)
@@ -232,7 +233,7 @@ class LasCal2CAP(ClassifierAccuracyPrediction):
         return self
 
     def predict(self, X):
-        lascal = LasCalCalibration()
+        lascal = LasCalCalibration(prob2logits=self.probs2logits)
 
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
