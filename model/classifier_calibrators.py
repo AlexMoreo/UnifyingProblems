@@ -1,4 +1,5 @@
 import numpy as np
+import quapy as qp
 import torch
 from quapy.data import LabelledCollection
 from sklearn.base import BaseEstimator
@@ -9,7 +10,7 @@ import util
 from calibrator import cal_acc_error, get_weight_feature_space
 from lascal import Calibrator
 from methods import HeadToTail, Cpcs, TransCal
-from quapy.method.aggregative import DistributionMatchingY, EMQ
+from quapy.method.aggregative import DistributionMatchingY, EMQ, ACC, PACC
 from scipy.special import softmax
 from abc import ABC, abstractmethod
 from sklearn.calibration import _fit_calibrator
@@ -41,8 +42,9 @@ def np_prob2logit(prob):
     return np2tensor(prob, probability_to_logit=True).numpy()
 
 # ----------------------------------------------------------
-# Basic wrap that simply returns the posterior probabilities
+# Baseline methods
 # ----------------------------------------------------------
+# Basic wrap that simply returns the posterior probabilities
 class UncalibratedWrap(CalibratorSimple):
     def __init__(self):
         pass
@@ -52,6 +54,18 @@ class UncalibratedWrap(CalibratorSimple):
             return softmax(Z, axis=-1)
         else:
             return Z
+
+
+class NaiveUncertain(CalibratorSimple):
+    def __init__(self, train_prev=None):
+        self.train_prev = train_prev
+
+    def calibrate(self, Z):
+        if self.train_prev is None:
+            uncertain = np.full_like(Z, fill_value=0.5)
+        else:
+            uncertain = np.tile(self.train_prev, (Z.shape[0],1))
+        return uncertain
 
 
 class PlattScaling(CalibratorSimple):
@@ -182,7 +196,9 @@ class EMBCTSCalibration(CalibratorSourceTarget):
             return Pte
 
 
-
+# -------------------------------------------------------------
+# Based on Quantification
+# -------------------------------------------------------------
 class HellingerDistanceCalibration(CalibratorSimple):
 
     def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False, postsmooth=False):
@@ -231,16 +247,28 @@ class EM(CalibratorSimple):
         return posteriors
 
 
-class NaiveUncertain(CalibratorSimple):
-    def __init__(self, train_prev=None):
-        self.train_prev = train_prev
+class PACCcal(CalibratorSimple):
+    POST_PROCESSING = ['clip', 'softmax']
+    def __init__(self, P, y, post_proc='clip'):
+        assert post_proc in PACCcal.POST_PROCESSING, 'unknown post_proc method'
+        PteCond = PACC.getPteCondEstim(classes=[0,1], y=y, y_=P)
+        self.tpr = PteCond[1,1]
+        self.fpr = PteCond[1,0]
+        self.post_proc = post_proc
 
     def calibrate(self, Z):
-        if self.train_prev is None:
-            uncertain = np.full_like(Z, fill_value=0.5)
+        tpr, fpr = self.tpr, self.fpr
+        denom = tpr-fpr
+        if denom > 0:
+            Zpos = Z[:,1]
+            calib = (Zpos-fpr) / (tpr-fpr)
+            if self.post_proc == 'clip':
+                calib = qp.functional.as_binary_prevalence(calib, clip_if_necessary=True)
+            else:
+                calib = softmax(np.asarray([1-calib, calib]).T, axis=1)
+            return calib
         else:
-            uncertain = np.tile(self.train_prev, (Z.shape[0],1))
-        return uncertain
+            return Z
 
 
 # ----------------------------------------------------------

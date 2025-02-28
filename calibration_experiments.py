@@ -64,18 +64,20 @@ def calibration_methods(classifier, Pva, yva, train):
     # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False)
     yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
     # yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
-    # yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
+    yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
     # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
-    for nbins in [20, 25, 30, 35, 40]:
-        dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
-        preclassified = LabelledCollection(Pva, yva)
-        dm.aggregation_fit(classif_predictions=preclassified, data=val)
+    # for nbins in [20, 25, 30, 35, 40]:
+    #     dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
+    #     preclassified = LabelledCollection(Pva, yva)
+    #     dm.aggregation_fit(classif_predictions=preclassified, data=val)
         # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
         # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
-        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+        # yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+    yield 'PACC-cal', PACCcal(Pva, yva)
+    yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
     yield 'NaiveUncertain', NaiveUncertain()
     yield 'NaiveTrain', NaiveUncertain(train_prev)
 
@@ -115,7 +117,6 @@ for dataset, (cls_name, cls) in pbar:
     train, val = train.split_stratified(0.5, random_state=0)
 
     Xtr, ytr = train.Xy
-
     cls.fit(Xtr, ytr)
 
     Xva, yva = val.Xy
