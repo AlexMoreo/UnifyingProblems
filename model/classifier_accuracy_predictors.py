@@ -2,6 +2,7 @@ from copy import deepcopy
 from typing import Callable
 
 from quapy.method.aggregative import AggregativeQuantifier, DistributionMatchingY, PACC, ACC
+from quapy.method.base import BaseQuantifier
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import confusion_matrix
 import numpy as np
@@ -333,10 +334,65 @@ class PACC2CAP_(ClassifierAccuracyPrediction):
         return acc_pred
 
 
-class PACC2CAP(ClassifierAccuracyPrediction):
+# class PACC2CAP(ClassifierAccuracyPrediction):
+#
+#     def __init__(self, classifier: BaseEstimator):
+#         super().__init__(classifier)
+#
+#     def fit(self, X, y):
+#         y_hat = self.classify(X)
+#         posteriors = self.posterior_probabilities(X)
+#
+#         # h(x)=1
+#         Xpos = X[y_hat == 1]
+#         ypos = y[y_hat == 1]
+#         Ppos = posteriors[y_hat == 1]
+#
+#         # h(x)=0
+#         Xneg = X[y_hat == 0]
+#         yneg = y[y_hat == 0]
+#         Pneg = posteriors[y_hat == 0]
+#
+#         # quantifier for predicted positives
+#         self.q_pos = PACC(classifier=self.h)
+#         self.q_pos.aggregation_fit(
+#             LabelledCollection(Ppos, ypos),
+#             LabelledCollection(Xpos, ypos),
+#         )
+#
+#         # quantifier for predicted negatives
+#         self.q_neg = PACC(classifier=self.h)
+#         self.q_neg.aggregation_fit(
+#             LabelledCollection(Pneg, yneg),
+#             LabelledCollection(Xneg, yneg)
+#         )
+#
+#         return self
+#
+#     def predict(self, X):
+#         y_hat = self.classify(X)
+#         posteriors = self.posterior_probabilities(X)
+#
+#         # predicted prevalence of positive instances in predicted positives
+#         pos_prev = self.q_pos.aggregate(posteriors[y_hat == 1])[1]
+#
+#         # predicted prevalence of negative instances in predicted negatives
+#         neg_prev = self.q_neg.aggregate(posteriors[y_hat == 0])[0]
+#
+#         n_instances = posteriors.shape[0]
+#         n_pred_pos = y_hat.sum()
+#         n_pred_neg = n_instances-n_pred_pos
+#
+#         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
+#
+#         return acc_pred
 
-    def __init__(self, classifier: BaseEstimator):
+
+class Quant2CAP(ClassifierAccuracyPrediction):
+
+    def __init__(self, classifier: BaseEstimator, quantifier_class):
         super().__init__(classifier)
+        self.quantifier_class = quantifier_class
 
     def fit(self, X, y):
         y_hat = self.classify(X)
@@ -353,14 +409,14 @@ class PACC2CAP(ClassifierAccuracyPrediction):
         Pneg = posteriors[y_hat == 0]
 
         # quantifier for predicted positives
-        self.q_pos = PACC(classifier=self.h)
+        self.q_pos = self.quantifier_class(classifier=self.h)
         self.q_pos.aggregation_fit(
             LabelledCollection(Ppos, ypos),
             LabelledCollection(Xpos, ypos),
         )
 
         # quantifier for predicted negatives
-        self.q_neg = PACC(classifier=self.h)
+        self.q_neg = self.quantifier_class(classifier=self.h)
         self.q_neg.aggregation_fit(
             LabelledCollection(Pneg, yneg),
             LabelledCollection(Xneg, yneg)
@@ -385,7 +441,6 @@ class PACC2CAP(ClassifierAccuracyPrediction):
         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
 
         return acc_pred
-
 
 class LEAP(ClassifierAccuracyPrediction):
 

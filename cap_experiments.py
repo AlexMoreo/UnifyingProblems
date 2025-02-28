@@ -1,4 +1,4 @@
-from quapy.method.aggregative import KDEyML
+from quapy.method.aggregative import KDEyML, EMQ
 from quapy.protocol import UPP
 from sklearn.linear_model import LogisticRegression
 
@@ -41,6 +41,7 @@ class ResultRow:
 
 def cap_methods(h:BaseEstimator, Xva, yva):
 
+    # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
     yield 'ATC', ATC(h).fit(Xva, yva)
@@ -48,9 +49,14 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     val_prot = UPP(val, sample_size=len(val), repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
 
+    # Calibration 2 CAP
     yield 'LasCal-a', LasCal2CAP(classifier=h).fit(Xva, yva)
     yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
-    yield 'PACC-a', PACC2CAP(classifier=h).fit(Xva, yva)
+
+    # Quantification 2 CAP
+    yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
+    yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
+    yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(Xva, yva)
 
 
 all_results = []
