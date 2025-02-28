@@ -54,7 +54,7 @@ class ResultRow:
 
 def calibration_methods(classifier, Pva, yva, train):
     yield 'Uncal', UncalibratedWrap()
-    # yield 'Platt', PlattScaling().fit(Pva, yva)
+    yield 'Platt', PlattScaling().fit(Pva, yva)
     # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'EM', EM(train.prevalence())
     # yield 'EM-BCTS', EMBCTSCalibration()
@@ -67,15 +67,15 @@ def calibration_methods(classifier, Pva, yva, train):
     yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
     # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
-    # for nbins in [20, 25, 30, 35, 40]:
-    #     dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
-    #     preclassified = LabelledCollection(Pva, yva)
-    #     dm.aggregation_fit(classif_predictions=preclassified, data=val)
-        # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
-        # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
-        # yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+    for nbins in [8, 20]: #, 25, 30, 35, 40]:
+        dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
+        preclassified = LabelledCollection(Pva, yva)
+        dm.aggregation_fit(classif_predictions=preclassified, data=val)
+        yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
+        yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
+        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
-        # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+        yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
     yield 'PACC-cal', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
     yield 'NaiveUncertain', NaiveUncertain()
@@ -107,7 +107,7 @@ n_classifiers = len([c for _,c in classifiers()])
 pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
 for dataset, (cls_name, cls) in pbar:
     if dataset in ['ctg.1', 'spambase', 'yeast']:
-        print('SKIPPING CTG.1, SPAMBASE')
+        print('SKIPPING CTG.1, SPAMBASE, YEAST')
         continue
     pbar.set_description(f'running: {dataset}')
 
@@ -153,17 +153,19 @@ for dataset, (cls_name, cls) in pbar:
 df = pd.concat(all_results)
 pivot = df.pivot_table(index=['classifier'], columns='method', values='ece')
 # print(df)
+print('ECE')
 print(pivot)
 # print(pivot.mean(axis=0))
 
 pivot = df.pivot_table(index=['classifier'], columns='method', values='brier')
 # print(df)
+print('Brier Score')
 print(pivot)
 # print(pivot.mean(axis=0))
 
-df['cal']=df['ece']*df['brier']
-pivot = df.pivot_table(index=['classifier'], columns='method', values='cal')
-print(pivot)
+# df['cal']=df['ece']*df['brier']
+# pivot = df.pivot_table(index=['classifier'], columns='method', values='cal')
+# print(pivot)
 # print(pivot.mean(axis=0))
 
 
