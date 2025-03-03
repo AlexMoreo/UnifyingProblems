@@ -103,11 +103,37 @@ def embed(model, tokenizer, data, selection_strategy, args):
     return split_logits, split_hidden_states, split_labels
 
 
+def prepare_dataset(dataset_name):
+    dataset_name_map = {
+        'imdb': "stanfordnlp/imdb",
+        'yelp': "Yelp/yelp_review_full",
+    }
+    dataset_fullname = dataset_name_map.get(dataset_name, None)
+    if dataset_fullname is None:
+        raise ValueError(f'unrecognized dataset name {dataset_name}; valid ones are {dataset_name_map.keys()}')
+
+    dataset = load_dataset(dataset_fullname)
+
+    if dataset_name == 'yelp':
+        def binarize_example(example):
+            if example["label"] in [0, 1]:  # negative
+                return {"text": example["text"], "label": 0}
+            elif example["label"] in [3, 4]:  # positive
+                return {"text": example["text"], "label": 1}
+            else:
+                return None # filter out 3 stars
+
+        dataset = dataset.map(binarize_example).filter(lambda x: x is not None)
+
+    return dataset
+
+
+
 def main(args):
     print(f"- model: {args.model_name}")
     print(f"- dataset: {args.dataset_name}")
 
-    dataset = load_dataset(args.dataset_name)
+    dataset = prepare_dataset(args.dataset_name)
 
     # create validation split if does not exist
     if "validation" not in dataset:
@@ -179,10 +205,10 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--model_name", type=str, default="google-bert/bert-base-uncased")
-    parser.add_argument("--dataset_name", type=str, default="stanfordnlp/imdb")
+    parser.add_argument("--dataset_name", type=str, default="yelp")
     parser.add_argument("--num_classes", type=int, default=2)
     parser.add_argument("--max_length", type=int, default=512)
-    parser.add_argument("--nepochs", type=int, default=1)
+    parser.add_argument("--nepochs", type=int, default=10)
     parser.add_argument("--train_batchsize", type=int, default=64)
     parser.add_argument("--embed_batchsize", type=int, default=512)
     parser.add_argument("--val_size", type=float, default=0.5)
@@ -191,3 +217,11 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
     main(args)
+
+    # model_names:
+    #   - "google-bert/bert-base-uncased"
+    #   - "FacebookAI/roberta-base"
+    #   - "distilbert/distilbert-base-uncased"
+
+    # datasets:
+    #   - "stanfordnlp/imdb" (binary)
