@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.xpu import device
 from tqdm import tqdm
 from itertools import batched
 
@@ -93,7 +94,7 @@ def embed(model, tokenizer, data, selection_strategy, args):
         split_hidden_states.append(
             selection_strategy(last_hidden_states.cpu().detach()))
         split_logits.append(logits.cpu().detach())
-        split_labels.append(labels.cpu().detach())
+        split_labels.append(torch.tensor(labels), device='cpu')
 
     split_logits = torch.vstack(split_logits)
     split_hidden_states = torch.vstack(split_hidden_states)
@@ -155,13 +156,13 @@ def main(args):
         callbacks=[],  # early stopping callback goes here, if needed
     )
     print("\nTraining...")
-    trainer.train()
+    # trainer.train()
 
     # Get embedddings and logits
     embeds_outdir = get_embed_outdir(args)
     print("\nEmbedding...")
     print(f"- storing embeddings in {embeds_outdir}")
-    splits = ["validation", "test"]
+    splits = ["train", "validation", "test"]
     for split in splits:
         split_data = dataset[split]
         split_logits, split_last_hiddens, split_labels = (
