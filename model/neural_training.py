@@ -94,7 +94,7 @@ def embed(model, tokenizer, data, selection_strategy, args):
         split_hidden_states.append(
             selection_strategy(last_hidden_states.cpu().detach()))
         split_logits.append(logits.cpu().detach())
-        split_labels.append(torch.tensor(labels), device='cpu')
+        split_labels.append(torch.tensor(labels, device='cpu'))
 
     split_logits = torch.vstack(split_logits)
     split_hidden_states = torch.vstack(split_hidden_states)
@@ -156,7 +156,7 @@ def main(args):
         callbacks=[],  # early stopping callback goes here, if needed
     )
     print("\nTraining...")
-    # trainer.train()
+    trainer.train()
 
     # Get embedddings and logits
     embeds_outdir = get_embed_outdir(args)
