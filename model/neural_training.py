@@ -79,6 +79,7 @@ def get_cls_bertlike(x):
 def embed(model, tokenizer, data, selection_strategy, args):
     split_logits = []
     split_hidden_states = []
+    split_labels = []
     for batch in batched(tqdm(data), n=args.embed_batchsize):
         texts, labels = zip(*((d["text"], d["label"]) for d in batch))
         with torch.no_grad():
@@ -92,11 +93,13 @@ def embed(model, tokenizer, data, selection_strategy, args):
         split_hidden_states.append(
             selection_strategy(last_hidden_states.cpu().detach()))
         split_logits.append(logits.cpu().detach())
+        split_labels.append(labels.cpu().detach())
 
     split_logits = torch.vstack(split_logits)
     split_hidden_states = torch.vstack(split_hidden_states)
+    split_labels = torch.concat(split_labels)
 
-    return split_logits, split_hidden_states
+    return split_logits, split_hidden_states, split_labels
 
 
 def main(args):
@@ -161,11 +164,13 @@ def main(args):
     splits = ["validation", "test"]
     for split in splits:
         split_data = dataset[split]
-        split_logits, split_last_hiddens = embed(model, tokenizer, data=split_data, selection_strategy=get_cls_bertlike,
-                                                 args=args)
+        split_logits, split_last_hiddens, split_labels = (
+            embed(model, tokenizer, data=split_data, selection_strategy=get_cls_bertlike,args=args)
+        )
 
         torch.save(split_logits, os.path.join(embeds_outdir, f"logits.{split}.pt"))
         torch.save(split_last_hiddens, os.path.join(embeds_outdir, f"hidden_states.{split}.pt"))
+        torch.save(split_labels, os.path.join(embeds_outdir, f"labels.{split}.pt"))
 
 
 if __name__ == "__main__":
