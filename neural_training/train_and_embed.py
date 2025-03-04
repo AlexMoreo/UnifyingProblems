@@ -220,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--nepochs", type=int, default=5)
     parser.add_argument("--train_batchsize", type=int, default=64)
     parser.add_argument("--embed_batchsize", type=int, default=512)
-    parser.add_argument("--val_size", type=float, default=5_000)
+    parser.add_argument("--val_size", type=int, default=5_000)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--train_backbone", action="store_true")
     parser.add_argument("--device", type=str, default="cuda")
