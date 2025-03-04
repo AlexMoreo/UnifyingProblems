@@ -57,7 +57,7 @@ def get_training_args(args):
         lr_scheduler_type="cosine",
         warmup_ratio=0.1,
         eval_strategy="steps",
-        eval_steps=100,
+        eval_steps=500,
         logging_steps=50,
         bf16=True,
         metric_for_best_model="f1",
@@ -188,7 +188,7 @@ def main(args):
         eval_dataset=dataset["validation"],
         args=trainer_args,
         compute_metrics=compute_clf_metrics,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=10)],  # stop if it does not improve after 10 validation steps
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],  # stop if it does not improve after 5 validation steps
     )
     print("\nTraining...")
     trainer.train()
