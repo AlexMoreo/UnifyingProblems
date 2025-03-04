@@ -255,5 +255,5 @@ if __name__ == "__main__":
     #   - "imdb" ("stanfordnlp/imdb", binary)
     #   - "yelp" ("Yelp/yelp_review_full", 5 stars rating, {1,2}->0, {4,5}->1)
     #   - "ag_news" ("fancyzhx/ag_news", 4 classes (0='world',1='sports',2='business',3='sci/tec'), {'world'}->0, {'sports', 'business', 'sci/tec'}->1) <-- only 1 epoch!
-    #   - "sst2" ("stanfordnlp/sst2") <-- not used
+    #   - "sst2" ("stanfordnlp/sst2") <-- not used, too big and similar to rotten tomatoes
     #   - "rt" ("cornell-movie-review-data/rotten_tomatoes")
