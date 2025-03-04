@@ -91,8 +91,7 @@ def embed(model, tokenizer, data, selection_strategy, args):
         hidden_states = output.hidden_states
         last_hidden_states = hidden_states[-1]
 
-        split_hidden_states.append(
-            selection_strategy(last_hidden_states.cpu().detach()))
+        split_hidden_states.append(selection_strategy(last_hidden_states.cpu().detach()))
         split_logits.append(logits.cpu().detach())
         split_labels.append(torch.tensor(labels, device='cpu'))
 
@@ -107,7 +106,8 @@ def prepare_dataset(dataset_name):
     dataset_name_map = {
         'imdb': "stanfordnlp/imdb",
         'yelp': "Yelp/yelp_review_full",
-        'ag_news': "fancyzhx/ag_news"
+        'ag_news': "fancyzhx/ag_news",
+        'sst2': "stanfordnlp/sst2"
     }
     dataset_fullname = dataset_name_map.get(dataset_name, None)
     if dataset_fullname is None:
@@ -137,6 +137,31 @@ def prepare_dataset(dataset_name):
     return dataset
 
 
+def extract_tensors(model, tokenizer, dataset, split, prefix, outdir):
+    split_data = dataset[split]
+    split_logits, split_last_hiddens, split_labels = (
+        embed(model, tokenizer, data=split_data, selection_strategy=get_cls_bertlike, args=args)
+    )
+
+    torch.save(split_logits, os.path.join(outdir, f"{prefix}.{split}.logits.pt"))
+    torch.save(split_last_hiddens, os.path.join(outdir, f"{prefix}.{split}.hidden_states.pt"))
+    torch.save(split_labels, os.path.join(outdir, f"{prefix}.{split}.labels.pt"))
+
+
+def set_learnable_parameters(model, train_backbone):
+    # freeze base model -> train only fresh init classification head
+    if not train_backbone:
+        print("- freezing base model weights")
+        for _, layer_weights in model.base_model.named_parameters():
+            layer_weights.requires_grad = False
+
+        # check trainable layers
+        trainable_layers = []
+        for layer_name, layer_weights in model.named_parameters():
+            if layer_weights.requires_grad == True:
+                trainable_layers.append(layer_name)
+        print(f"- trainable layers: {trainable_layers}")
+
 
 def main(args):
     print(f"- model: {args.model_name}")
@@ -158,25 +183,15 @@ def main(args):
 
     model, tokenizer = get_classifier(model_name=args.model_name, n_classes=args.num_classes, device=args.device)
 
-    # freeze base model -> train only fresh init classification head
-    if not args.train_backbone:
-        print("- freezing base model weights")
-        for _, layer_weights in model.base_model.named_parameters():
-            layer_weights.requires_grad = False
-
-        # check trainable layers
-        trainable_layers = []
-        for layer_name, layer_weights in model.named_parameters():
-            if layer_weights.requires_grad == True:
-                trainable_layers.append(layer_name)
-        print(f"- trainable layers: {trainable_layers}")
+    set_learnable_parameters(model, train_backbone=args.train_backbone)
 
     def tokenize_dataset(sample):
         return tokenizer(sample["text"], truncation=True, max_length=args.max_length, padding="max_length",
                          return_tensors="pt")
 
     # tokenize dataset
-    dataset = dataset.map(tokenize_dataset, batched=True, num_proc=8)
+    dataset = dataset.map(tokenize_dataset, batched=True, num_proc=16)
+    print(dataset['test'][0])
 
     # train model
     trainer_args = get_training_args(args)
@@ -199,14 +214,14 @@ def main(args):
     print(f"- storing embeddings in {embeds_outdir}")
     splits = ["train", "validation", "test"]
     for split in splits:
-        split_data = dataset[split]
-        split_logits, split_last_hiddens, split_labels = (
-            embed(model, tokenizer, data=split_data, selection_strategy=get_cls_bertlike,args=args)
-        )
+        extract_tensors(model, tokenizer, dataset, split=split, prefix='source', outdir=embeds_outdir)
 
-        torch.save(split_logits, os.path.join(embeds_outdir, f"logits.{split}.pt"))
-        torch.save(split_last_hiddens, os.path.join(embeds_outdir, f"hidden_states.{split}.pt"))
-        torch.save(split_labels, os.path.join(embeds_outdir, f"labels.{split}.pt"))
+    sentiment_datasets = ['imdb', 'yelp', 'sst2']
+    if args.dataset_name in sentiment_datasets:
+        target_dataset_names = [dataname for dataname in sentiment_datasets if dataname!=args.dataset_name]
+        for target_dataset_name in target_dataset_names:
+            target_dataset = prepare_dataset(target_dataset_name)
+            extract_tensors(model, tokenizer, target_dataset, split='test', prefix=f'target_{target_dataset_name}', outdir=embeds_outdir)
 
 
 if __name__ == "__main__":
@@ -214,7 +229,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--model_name", type=str, default="google-bert/bert-base-uncased")
-    parser.add_argument("--dataset_name", type=str, default="ag_news")
+    parser.add_argument("--dataset_name", type=str, default="imdb")
     parser.add_argument("--num_classes", type=int, default=2)
     parser.add_argument("--max_length", type=int, default=512)
     parser.add_argument("--nepochs", type=int, default=5)
@@ -236,3 +251,4 @@ if __name__ == "__main__":
     #   - "imdb" ("stanfordnlp/imdb", binary)
     #   - "yelp" ("Yelp/yelp_review_full", 5 stars rating, {1,2}->0, {4,5}->1)
     #   - "ag_news" ("fancyzhx/ag_news", 4 classes (0='world',1='sports',2='business',3='sci/tec'), {'world'}->0, {'sports', 'business', 'sci/tec'}->1) <-- only 1 epoch!
+    #   - "sst2" ("stanfordnlp/sst2")
