@@ -135,8 +135,8 @@ def prepare_dataset(dataset_name):
 
         dataset = dataset.map(binarize_example).filter(lambda x: x is not None)
 
-    if dataset_name == 'sst2':
-        'text'->'sentence'
+    # if dataset_name == 'sst2':
+    #     'text'->'sentence'
 
 
     return dataset
