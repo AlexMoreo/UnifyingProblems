@@ -1,16 +1,18 @@
 from glob import glob
 import pandas as pd
 import util
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 input_dir = './results/calibration/label_shift/repeats_100'
 
 results = pd.concat([pd.read_csv(result_file) for result_file in glob(input_dir+'/*.csv')])
 
-pivot = results.pivot_table(index='dataset', columns='method', values='ece')
+filter_out = [f'HDcal{n}-sm-mono' for n in [20,25,30,35]]+['PACC-cal']
+for method in filter_out:
+    results = results[results['method'] != method]
 
-
-import matplotlib.pyplot as plt
-import seaborn as sns
+# pivot = results.pivot_table(index='dataset', columns='method', values='ece')
 
 # results = results.reset_index(drop=True)
 #
@@ -28,34 +30,34 @@ import seaborn as sns
 # plt.show()
 
 
-# Definir número de bins (ajusta según necesites)
-num_bins = 10
+num_bins = 20
 
-# Crear los bins para "shift"
 results["shift_bin"] = pd.cut(results["shift"], bins=num_bins, labels=False)
 
-# Calcular media y desviación estándar de ECE en cada bin, para cada método
 summary = results.groupby(["shift_bin", "method"]).agg(
     mean_ece=("ece", "mean"),
     std_ece=("ece", "std"),
-    shift_center=("shift", "mean")  # Usamos el centro del bin para graficar
+    shift_center=("shift", "mean")  # the bin center
 ).reset_index()
 
 plt.figure(figsize=(8, 6))
 
-# Graficar líneas con barras de error (desviación estándar)
 sns.lineplot(
     data=summary,
     x="shift_center", y="mean_ece",
     hue="method",
-    errorbar=("sd"),  # Muestra barras de error con la desviación estándar
+    errorbar=("sd"),
     marker="o"
 )
 
-# plt.yscale("log")
+logscale = True
+
+if logscale:
+    plt.yscale("log")
+    plt.ylabel("Mean ECE (log scale)")
+else:
+    plt.ylabel("Mean ECE")
 plt.xlabel("Shift")
-# plt.ylabel("Mean ECE (log scale)")
-plt.ylabel("Mean ECE")
 plt.title("Mean ECE vs Shift (binned)")
 
 plt.legend(title="Method", loc="upper left", bbox_to_anchor=(1, 1))

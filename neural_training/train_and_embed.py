@@ -72,8 +72,8 @@ def get_training_args(args):
 
 
 def get_cls_bertlike(x):
-    cls_emebds = x[:, 0,
-                 :]  # get representation associated with the "CLS" token. In BERT-like models this is usually assigned with the first token of the input sequence (idx=0)
+    # get representation associated with the "CLS" token. In BERT-like models this is usually assigned with the first token of the input sequence (idx=0)
+    cls_emebds = x[:, 0, :]
     return cls_emebds
 
 
@@ -107,6 +107,7 @@ def prepare_dataset(dataset_name):
     dataset_name_map = {
         'imdb': "stanfordnlp/imdb",
         'yelp': "Yelp/yelp_review_full",
+        'ag_news': "fancyzhx/ag_news"
     }
     dataset_fullname = dataset_name_map.get(dataset_name, None)
     if dataset_fullname is None:
@@ -122,6 +123,14 @@ def prepare_dataset(dataset_name):
                 return {"text": example["text"], "label": 1}
             else:
                 return None # filter out 3 stars
+
+        dataset = dataset.map(binarize_example).filter(lambda x: x is not None)
+
+    if dataset_name == 'ag_news':
+        def binarize_example(example):
+            # "World" vs the rest ("Sports", "Business", "Sci/tec")
+            example["label"] = 0 if example["label"] == 0 else 1
+            return example
 
         dataset = dataset.map(binarize_example).filter(lambda x: x is not None)
 
@@ -179,7 +188,7 @@ def main(args):
         eval_dataset=dataset["validation"],
         args=trainer_args,
         compute_metrics=compute_clf_metrics,
-        callbacks=[],  # early stopping callback goes here, if needed
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=10)],  # stop if it does not improve after 10 validation steps
     )
     print("\nTraining...")
     trainer.train()
@@ -211,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--nepochs", type=int, default=10)
     parser.add_argument("--train_batchsize", type=int, default=64)
     parser.add_argument("--embed_batchsize", type=int, default=512)
-    parser.add_argument("--val_size", type=float, default=0.5)
+    parser.add_argument("--val_size", type=float, default=0.25)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--train_backbone", action="store_true")
     parser.add_argument("--device", type=str, default="cuda")
@@ -224,4 +233,6 @@ if __name__ == "__main__":
     #   - "distilbert/distilbert-base-uncased"
 
     # datasets:
-    #   - "stanfordnlp/imdb" (binary)
+    #   - "imdb" ("stanfordnlp/imdb", binary)
+    #   - "yelp" ("Yelp/yelp_review_full", 5 stars rating, {1,2}->0, {4,5}->1)
+    #   - "ag_news" ("fancyzhx/ag_news", 4 classes (0='world',1='sports',2='business',3='sci/tec'), {'world'}->0, {'sports', 'business', 'sci/tec'}->1) <-- only 1 epoch!
