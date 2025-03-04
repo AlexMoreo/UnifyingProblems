@@ -107,7 +107,8 @@ def prepare_dataset(dataset_name):
         'imdb': "stanfordnlp/imdb",
         'yelp': "Yelp/yelp_review_full",
         'ag_news': "fancyzhx/ag_news",
-        'sst2': "stanfordnlp/sst2"
+        # 'sst2': "stanfordnlp/sst2"
+        'rt': "cornell-movie-review-data/rotten_tomatoes"
     }
     dataset_fullname = dataset_name_map.get(dataset_name, None)
     if dataset_fullname is None:
@@ -133,6 +134,10 @@ def prepare_dataset(dataset_name):
             return example
 
         dataset = dataset.map(binarize_example).filter(lambda x: x is not None)
+
+    if dataset_name == 'sst2':
+        'text'->'sentence'
+
 
     return dataset
 
@@ -178,8 +183,8 @@ def main(args):
 
     n_inferred_classes = dataset["train"].shape[-1]
     if args.num_classes != n_inferred_classes:
-        print(
-            f"number of inferred target classes ({n_inferred_classes}) != number of given target classes ({args.num_classes})")
+        print(f"number of inferred target classes ({n_inferred_classes}) != number of given target classes "
+              f"({args.num_classes})")
 
     model, tokenizer = get_classifier(model_name=args.model_name, n_classes=args.num_classes, device=args.device)
 
@@ -191,7 +196,6 @@ def main(args):
 
     # tokenize dataset
     dataset = dataset.map(tokenize_dataset, batched=True, num_proc=16)
-    print(dataset['test'][0])
 
     # train model
     trainer_args = get_training_args(args)
@@ -216,7 +220,7 @@ def main(args):
     for split in splits:
         extract_tensors(model, tokenizer, dataset, split=split, prefix='source', outdir=embeds_outdir)
 
-    sentiment_datasets = ['imdb', 'yelp', 'sst2']
+    sentiment_datasets = ['imdb', 'yelp', 'rt']
     if args.dataset_name in sentiment_datasets:
         target_dataset_names = [dataname for dataname in sentiment_datasets if dataname!=args.dataset_name]
         for target_dataset_name in target_dataset_names:
@@ -251,4 +255,5 @@ if __name__ == "__main__":
     #   - "imdb" ("stanfordnlp/imdb", binary)
     #   - "yelp" ("Yelp/yelp_review_full", 5 stars rating, {1,2}->0, {4,5}->1)
     #   - "ag_news" ("fancyzhx/ag_news", 4 classes (0='world',1='sports',2='business',3='sci/tec'), {'world'}->0, {'sports', 'business', 'sci/tec'}->1) <-- only 1 epoch!
-    #   - "sst2" ("stanfordnlp/sst2")
+    #   - "sst2" ("stanfordnlp/sst2") <-- not used
+    #   - "rt" ("cornell-movie-review-data/rotten_tomatoes")
