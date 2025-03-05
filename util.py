@@ -29,14 +29,20 @@ def posterior_probabilities(h, X):
     return P
 
 
-def cal_error(Pte, yte):
+def cal_error(conf_scores, y, arelogits=False):
     # expected_cal_error = Ece(adaptive_bins=True, n_bins=15, p=2, classwise=False)
     expected_cal_error = Ece(adaptive_bins=False, version='other', n_bins=15, p=2, classwise=False)
 
-    logits = prob2logits(Pte)
+    if not arelogits:
+        assert np.isclose(conf_scores.sum(axis=1), 1).all(), \
+            "conf_scores are assumed to be posterior probabilities, but they don't sum up to 1"
+        logits = prob2logits(conf_scores)
+    else:
+        logits = torch.from_numpy(conf_scores)
+
     ece = expected_cal_error(
         logits=logits,
-        labels=torch.from_numpy(yte),
+        labels=torch.from_numpy(y),
     ).item()
 
     return ece * 100

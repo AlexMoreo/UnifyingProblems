@@ -29,7 +29,7 @@ class CalibratorSourceTarget(ABC):
 
 class CalibratorCompound(ABC):
     @abstractmethod
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Zte):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
         ...
 
 def np2tensor(scores, probability_to_logit=False):
@@ -242,8 +242,8 @@ class EM(CalibratorSimple):
         self.emq = EMQ()
         self.train_prevalence = train_prevalence
 
-    def calibrate(self, Z):
-        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=Z)
+    def calibrate(self, P):
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P)
         return posteriors
 
 
@@ -256,11 +256,11 @@ class PACCcal(CalibratorSimple):
         self.fpr = PteCond[1,0]
         self.post_proc = post_proc
 
-    def calibrate(self, Z):
+    def calibrate(self, P):
         tpr, fpr = self.tpr, self.fpr
         denom = tpr-fpr
         if denom > 0:
-            Zpos = Z[:,1]
+            Zpos = P[:, 1]
             calib = (Zpos-fpr) / (tpr-fpr)
             if self.post_proc == 'clip':
                 calib = qp.functional.as_binary_prevalence(calib, clip_if_necessary=True)
@@ -268,7 +268,7 @@ class PACCcal(CalibratorSimple):
                 calib = softmax(np.asarray([1-calib, calib]).T, axis=1)
             return calib
         else:
-            return Z
+            return P
 
 
 # ----------------------------------------------------------
@@ -280,7 +280,7 @@ class TransCalCalibrator(CalibratorCompound):
     def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
         Zsrc = np2tensor(Zsrc, self.prob2logits)
         Ztgt = np2tensor(Ztgt, self.prob2logits)
         ysrc = np2tensor(ysrc)
@@ -292,7 +292,7 @@ class TransCalCalibrator(CalibratorCompound):
         _, source_confidence, error_source_val = cal_acc_error(
             Zsrc / optim_temp_source, ysrc
         )
-        weight = get_weight_feature_space(Ftr, Fte, Fsrc)
+        weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
         # Find optimal temp with TransCal
         optim_temp = TransCal().find_best_T(
             Ztgt.numpy(),
@@ -311,13 +311,13 @@ class CpcsCalibrator(CalibratorCompound):
     def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
 
         Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
         Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
         ysrc = np2tensor(ysrc)
 
-        weight = get_weight_feature_space(Ftr, Fte, Fsrc)
+        weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
         # Find optimal temp with TransCal
 
         optim_temp = Cpcs().find_best_T(Zsrc, ysrc, weight)
