@@ -5,14 +5,14 @@ import quapy as qp
 import quapy.functional as F
 import torch
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import AggregativeSoftQuantifier, PACC, EMQ, PCC
+from quapy.method.aggregative import AggregativeSoftQuantifier, PACC, EMQ, PCC, KDEyML
 from quapy.method.base import BaseQuantifier
 from quapy.protocol import AbstractProtocol
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 
 from lascal import EceLabelShift, get_importance_weights
-from model.classifier_accuracy_predictors import ATC, DoC
-from model.classifier_calibrators import LasCalCalibration
+from model.classifier_accuracy_predictors import ATC, DoC, LEAP
+from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator
 from util import posterior_probabilities
 
 
@@ -20,8 +20,49 @@ class ATC2Quant(BaseQuantifier):
 
     def __init__(self, classifier: BaseEstimator):
         self.h = classifier
-        self.cap_pos = ATC(classifier=classifier)
-        self.cap_neg = ATC(classifier=classifier)
+        self.cap_pos = ATC(classifier=clone(classifier))
+        self.cap_neg = ATC(classifier=clone(classifier))
+
+    def fit(self, data: LabelledCollection):
+        X, y = data.Xy
+        y_pred = self.h.predict(X)
+
+        # h(x)=1
+        Xpos = X[y_pred == 1]
+        ypos = y[y_pred == 1]
+        self.cap_pos.fit(Xpos, ypos)
+
+        # h(x)=1
+        Xneg = X[y_pred == 0]
+        yneg = y[y_pred == 0]
+        self.cap_neg.fit(Xneg, yneg)
+
+        return self
+
+    def quantify(self, X):
+        n = X.shape[0]
+        y_pred = self.h.predict(X)
+
+        Xpos = X[y_pred == 1]
+        acc_pos = self.cap_pos.predict(Xpos)
+        n_pos = Xpos.shape[0]
+
+        Xneg = X[y_pred == 0]
+        acc_neg = self.cap_neg.predict(Xneg)
+        n_neg = Xneg.shape[0]
+
+        estim_pos_prev = acc_pos*(n_pos/n) + (1-acc_neg)*(n_neg/n)
+        estim_prev = F.as_binary_prevalence(estim_pos_prev)
+
+        return estim_prev
+
+
+class LEAP2Quant(BaseQuantifier):
+
+    def __init__(self, classifier: BaseEstimator):
+        self.h = classifier
+        self.cap_pos = LEAP(classifier=classifier, q_class=KDEyML(classifier=clone(classifier)))
+        self.cap_neg = LEAP(classifier=classifier, q_class=KDEyML(classifier=clone(classifier)))
 
     def fit(self, data: LabelledCollection):
         X, y = data.Xy
@@ -102,9 +143,9 @@ class DoC2Quant(BaseQuantifier):
 
 
 class LasCal2Quant(BaseQuantifier):
-    def __init__(self, classifier):
+    def __init__(self, classifier, prob2logits=True):
         self.classifier = classifier
-        self.lascal = LasCalCalibration()
+        self.lascal = LasCalCalibration(prob2logits)
 
     def fit(self, data: LabelledCollection):
         X, y = data.Xy
@@ -116,6 +157,53 @@ class LasCal2Quant(BaseQuantifier):
     def quantify(self, X):
         P_uncal = posterior_probabilities(self.classifier, X)
         P_calib = self.lascal.calibrate(self.Ptr, self.ytr, P_uncal)
+        prev_estim = np.mean(P_calib, axis=0)
+        return prev_estim
+
+
+class Transcal2Quant(BaseQuantifier):
+    def __init__(self, classifier, Xtr, ytr, prob2logits=True):
+        self.classifier = classifier
+        self.transcal = TransCalCalibrator(prob2logits)
+        self.Xtr = Xtr
+        self.ytr = ytr
+
+    def fit(self, data: LabelledCollection):
+        X, y = data.Xy
+        P = posterior_probabilities(self.classifier, X)
+        self.Xva = X
+        self.Pva = P
+        self.yva = y
+        return self
+
+    def quantify(self, X):
+        P_uncal = posterior_probabilities(self.classifier, X)
+        P_calib = self.transcal.calibrate(
+            self.Xtr, self.ytr, self.Xva, self.Pva, self.yva, X, P_uncal
+        )
+        prev_estim = np.mean(P_calib, axis=0)
+        return prev_estim
+
+class Head2Tail2Quant(BaseQuantifier):
+    def __init__(self, classifier, Xtr, ytr, prob2logits=True):
+        self.classifier = classifier
+        self.head2tail = HeadToTailCalibrator(prob2logits)
+        self.Xtr = Xtr
+        self.ytr = ytr
+
+    def fit(self, data: LabelledCollection):
+        X, y = data.Xy
+        P = posterior_probabilities(self.classifier, X)
+        self.Xva = X
+        self.Pva = P
+        self.yva = y
+        return self
+
+    def quantify(self, X):
+        P_uncal = posterior_probabilities(self.classifier, X)
+        P_calib = self.head2tail.calibrate(
+            self.Xtr, self.ytr, self.Xva, self.Pva, self.yva, X, P_uncal
+        )
         prev_estim = np.mean(P_calib, axis=0)
         return prev_estim
 

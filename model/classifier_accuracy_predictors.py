@@ -189,7 +189,7 @@ def neg_entropy(P, keepdims=False):
     ne = scipy.stats.entropy(P, axis=1)
     if keepdims:
         ne = ne.reshape(-1, 1)
-    return ne
+    return -ne
 
 
 def max_inverse_softmax(P, keepdims=False):

@@ -54,10 +54,12 @@ class ResultRow:
 
 def calibration_methods(classifier, Pva, yva, train):
     yield 'Uncal', UncalibratedWrap()
+    # yield 'NaiveUncertain', NaiveUncertain()
+    # yield 'NaiveTrain', NaiveUncertain(train_prev)
+
+    # proper calibration methods
     yield 'Platt', PlattScaling().fit(Pva, yva)
     # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
-    yield 'EM', EM(train.prevalence())
-    # yield 'EM-BCTS', EMBCTSCalibration()
     yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
     # yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
     yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True)
@@ -67,19 +69,23 @@ def calibration_methods(classifier, Pva, yva, train):
     yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
     # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
-    for nbins in [8, 20]: #, 25, 30, 35, 40]:
+    # from quantification
+    yield 'EM', EM(train.prevalence())
+    # yield 'EM-BCTS', EMBCTSCalibration()
+    for nbins in [8]: #20, 25, 30, 35, 40]:
         dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
         preclassified = LabelledCollection(Pva, yva)
         dm.aggregation_fit(classif_predictions=preclassified, data=val)
-        yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
-        yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
+        # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
+        # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
         yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
-        yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+        # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
     yield 'PACC-cal', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
-    yield 'NaiveUncertain', NaiveUncertain()
-    yield 'NaiveTrain', NaiveUncertain(train_prev)
+
+    # from cap
+
 
 
 def classifiers():
@@ -102,13 +108,14 @@ def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
 
 
 all_results = []
+method_order = []
 
 n_classifiers = len([c for _,c in classifiers()])
 pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
 for dataset, (cls_name, cls) in pbar:
-    if dataset in ['ctg.1', 'spambase', 'yeast']:
-        print('SKIPPING CTG.1, SPAMBASE, YEAST')
-        continue
+    # if dataset in ['ctg.1', 'spambase', 'yeast']:
+    #     print('SKIPPING CTG.1, SPAMBASE, YEAST')
+    #     continue
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
@@ -126,6 +133,9 @@ for dataset, (cls_name, cls) in pbar:
     app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
 
     for name, calibrator in calibration_methods(cls, Pva, yva, train):
+        if name not in method_order:
+            method_order.append(name)
+
         result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
@@ -169,3 +179,16 @@ print(pivot)
 # print(pivot.mean(axis=0))
 
 
+from new_table import WithConfigurationLatexTable
+
+for classifier_name, _ in classifiers():
+    df_h = df[df['classifier']==classifier_name]
+    table_ece = WithConfigurationLatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
+    table_ece.name = f'calibration_pps_ECE_{classifier_name}'
+    table_ece.reorder_methods(method_order)
+    table_ece.latexPDF(f'./tables/calibration_ECE_{classifier_name}.pdf')
+
+    table_brier = WithConfigurationLatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
+    table_brier.name = f'calibration_pps_brier_{classifier_name}'
+    table_brier.reorder_methods(method_order)
+    table_brier.latexPDF(f'./tables/calibration_Brier_{classifier_name}.pdf')

@@ -34,16 +34,27 @@ def new_labelshift_protocol(X, y, classes):
     return app
 
 
-def quantifiers(classifier):
+def quantifiers(classifier, Xtr, ytr):
+    # quantification methods
     yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
     yield 'CC', CC(classifier)
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
     yield 'EMQ', EMQ(classifier)
     yield 'KDEy', KDEyML(classifier)
+
+    # CAP methods
     yield 'ATC-q', ATC2Quant(classifier)
     yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_labelshift_protocol)
-    # yield 'LasCal-q', LasCal2Quant(classifier)
+    yield 'LEAP-q', LEAP2Quant(classifier)
+
+    # Calibration methods
+    yield 'LasCal-q', LasCal2Quant(classifier, prob2logits=True)
+    # yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
+    yield 'TransCal-q', Transcal2Quant(classifier, Xtr, ytr, prob2logits=True)
+    yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
+    yield 'Head2Tail-q', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
+    yield 'Head2Tail-q-P', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=False)
     # yield 'PACC(LasCal)', PACCLasCal(classifier)
     # yield 'EMQ(LasCal)', EMQLasCal(classifier)
 
@@ -61,6 +72,7 @@ print('Datasets:', datasets_selected)
 print('Repeats:', REPEATS)
 
 all_results = []
+methods_order = []
 
 pbar = tqdm(datasets_selected, total=len(datasets_selected))
 for dataset in pbar:
@@ -77,7 +89,10 @@ for dataset in pbar:
     h = LogisticRegression()
     h.fit(*train.Xy)
 
-    for name, quant in quantifiers(classifier=h):
+    for name, quant in quantifiers(h, *train.Xy):
+        if name not in methods_order:
+            methods_order.append(name)
+
         result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
@@ -99,3 +114,11 @@ pivot = df.pivot_table(index='dataset', columns='method', values='ae')
 print(df)
 print(pivot)
 print(pivot.mean(axis=0))
+
+
+from new_table import WithConfigurationLatexTable
+
+table = WithConfigurationLatexTable.from_dataframe(df, method='method', benchmark='dataset', value='ae')
+table.name = 'quantification_pps'
+table.reorder_methods(methods_order)
+table.latexPDF('./tables/quantification.pdf')

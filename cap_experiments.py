@@ -44,6 +44,8 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(Xva, yva)
     yield 'ATC', ATC(h).fit(Xva, yva)
+    # yield 'ATC-ne', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva) <- wrong implementation? redo in the next line
+    # yield 'ATC-ne2', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva)
     val_prot = UPP(val, sample_size=len(val), repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
@@ -60,6 +62,7 @@ def cap_methods(h:BaseEstimator, Xva, yva):
 
 
 all_results = []
+methods_order = []
 
 pbar = tqdm(datasets_selected, total=len(datasets_selected))
 for dataset in pbar:
@@ -81,6 +84,8 @@ for dataset in pbar:
     app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
 
     for name, cap_method in cap_methods(h, Xva, yva):
+        if name not in methods_order:
+            methods_order.append(name)
         result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
@@ -109,3 +114,10 @@ pivot = df.pivot_table(index='dataset', columns='method', values='err')
 print(df)
 print(pivot)
 print(pivot.mean(axis=0))
+
+from new_table import WithConfigurationLatexTable
+
+table = WithConfigurationLatexTable.from_dataframe(df, method='method', benchmark='dataset', value='err')
+table.name = 'cap_pps'
+table.reorder_methods(methods_order)
+table.latexPDF('./tables/cap.pdf')
