@@ -62,24 +62,6 @@ class OracleQuantifierFromCAP:
         return prevalence
 
 
-class LasCalQuantifier(AggregativeSoftQuantifier):
-
-    def __init__(self, classifier, val_split=5, verbose=False):
-        self.classifier = classifier
-        self.lascal = LasCalCalibration(verbose=verbose)
-        self.val_split = val_split
-
-    def aggregation_fit(self, classif_predictions: LabelledCollection, data: LabelledCollection):
-        self.Ptr = classif_predictions.X
-        self.ytr = classif_predictions.y
-        return self
-
-    def aggregate(self, Pte):
-        Pte_recalib = self.lascal.predict_proba(self.Ptr, self.ytr, Pte)
-        prevalence = Pte_recalib.mean(axis=0)
-        return prevalence
-
-
 # -----------------------------------------------------
 # Calibrators
 # -----------------------------------------------------

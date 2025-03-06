@@ -59,7 +59,7 @@ def calibration_methods(classifier, Pva, yva, train):
 
     # proper calibration methods
     yield 'Platt', PlattScaling().fit(Pva, yva)
-    # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
     # yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
     yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True)
@@ -83,6 +83,21 @@ def calibration_methods(classifier, Pva, yva, train):
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
     yield 'PACC-cal', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
+    yield 'PACC-cal(log)2', PACCcal(Pva, yva, post_proc='logistic')
+    yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
+    yield 'PACC-cal(iso)2', PACCcal(Pva, yva, post_proc='isotonic')
+
+    # yield 'Bin-PACC', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC).fit(Pva, yva)
+    # yield 'Bin-PACC2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=2).fit(Pva, yva)
+    # yield 'Bin-PACC5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Pva, yva)
+    yield 'Bin2-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Xva, yva)
+    # yield 'Bin-EM', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ).fit(Pva, yva)
+    # yield 'Bin-EM2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=2).fit(Pva, yva)
+    # yield 'Bin-EM5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Pva, yva)
+    yield 'Bin2-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
+    yield 'Bin2-DM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=DistributionMatchingY, nbins=5).fit(Xva, yva)
 
     # from cap
 
@@ -179,16 +194,23 @@ print(pivot)
 # print(pivot.mean(axis=0))
 
 
-from new_table import WithConfigurationLatexTable
+from new_table import LatexTable
 
+tables = []
 for classifier_name, _ in classifiers():
     df_h = df[df['classifier']==classifier_name]
-    table_ece = WithConfigurationLatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
+    table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
     table_ece.name = f'calibration_pps_ECE_{classifier_name}'
     table_ece.reorder_methods(method_order)
-    table_ece.latexPDF(f'./tables/calibration_ECE_{classifier_name}.pdf')
+    table_ece.format.configuration.show_std=False
+    table_ece.format.configuration.side_columns = True
+    tables.append(table_ece)
 
-    table_brier = WithConfigurationLatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
+    table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
     table_brier.name = f'calibration_pps_brier_{classifier_name}'
     table_brier.reorder_methods(method_order)
-    table_brier.latexPDF(f'./tables/calibration_Brier_{classifier_name}.pdf')
+    table_brier.format.configuration.show_std = False
+    table_brier.format.configuration.side_columns = True
+    tables.append(table_brier)
+
+LatexTable.LatexPDF(f'./tables/calibration.pdf', tables)

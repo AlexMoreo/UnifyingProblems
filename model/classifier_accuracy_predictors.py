@@ -15,7 +15,8 @@ from quapy.protocol import AbstractProtocol
 import quapy.functional as F
 from sklearn.base import BaseEstimator
 
-from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration
+from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration, TransCalCalibrator, \
+    CalibratorCompound
 from util import posterior_probabilities, accuracy, accuracy_from_contingency_table
 
 
@@ -248,6 +249,58 @@ class LasCal2CAP(ClassifierAccuracyPrediction):
         return acc_pred
 
 
+class CalibratorCompound2CAP(ClassifierAccuracyPrediction):
+
+    def __init__(self, classifier: BaseEstimator, calibrator_cls: CalibratorCompound, Ftr, ytr, probs2logits=True):
+        super().__init__(classifier)
+        self.calibrator_cls = calibrator_cls
+        self.Ftr = Ftr
+        self.ytr = ytr
+        self.probs2logits = probs2logits
+
+    def fit(self, X, y):
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
+
+        # h(x)=1
+        self.Ppos = posteriors[y_hat == 1]
+        self.ypos = y[y_hat == 1]
+        self.Xpos = X[y_hat == 1]
+
+        # h(x)=0
+        self.Pneg = posteriors[y_hat == 0]
+        self.yneg = y[y_hat == 0]
+        self.Xneg = X[y_hat == 0]
+
+        return self
+
+    def predict(self, X):
+        calibrator = self.calibrator_cls(prob2logits=self.probs2logits)
+
+        y_hat = self.classify(X)
+        posteriors = self.posterior_probabilities(X)
+        Xpos = X[y_hat == 1]
+        Xneg = X[y_hat == 0]
+        Ppos = posteriors[y_hat == 1]
+        Pneg = posteriors[y_hat == 0]
+
+        cal_pos = calibrator.calibrate(
+            Ftr=self.Ftr, ytr=self.ytr,
+            Fsrc=self.Xpos, Zsrc=self.Ppos, ysrc=self.ypos,
+            Ftgt=Xpos, Ztgt=Ppos
+        )
+        cal_neg = calibrator.calibrate(
+            Ftr=self.Ftr, ytr=self.ytr,
+            Fsrc=self.Xneg, Zsrc=self.Pneg, ysrc=self.yneg,
+            Ftgt=Xneg, Ztgt=Pneg
+        )
+
+        n_instances = posteriors.shape[0]
+
+        acc_pred = (cal_pos[:,1].sum() + cal_neg[:,0].sum()) / n_instances
+
+        return acc_pred
+
 class HDC2CAP(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator):
@@ -442,6 +495,7 @@ class Quant2CAP(ClassifierAccuracyPrediction):
         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
 
         return acc_pred
+
 
 class LEAP(ClassifierAccuracyPrediction):
 

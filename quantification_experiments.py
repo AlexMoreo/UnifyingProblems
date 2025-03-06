@@ -52,8 +52,8 @@ def quantifiers(classifier, Xtr, ytr):
     yield 'LasCal-q', LasCal2Quant(classifier, prob2logits=True)
     # yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
     yield 'TransCal-q', Transcal2Quant(classifier, Xtr, ytr, prob2logits=True)
-    yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
-    yield 'Head2Tail-q', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
+    # yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
+    # yield 'Head2Tail-q', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
     yield 'Head2Tail-q-P', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=False)
     # yield 'PACC(LasCal)', PACCLasCal(classifier)
     # yield 'EMQ(LasCal)', EMQLasCal(classifier)
@@ -116,9 +116,10 @@ print(pivot)
 print(pivot.mean(axis=0))
 
 
-from new_table import WithConfigurationLatexTable
+from new_table import LatexTable
 
-table = WithConfigurationLatexTable.from_dataframe(df, method='method', benchmark='dataset', value='ae')
+table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', value='ae')
 table.name = 'quantification_pps'
 table.reorder_methods(methods_order)
+table.format.configuration.show_std=False
 table.latexPDF('./tables/quantification.pdf')

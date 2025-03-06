@@ -2,10 +2,11 @@ import numpy as np
 import quapy as qp
 import torch
 from quapy.data import LabelledCollection
-from sklearn.base import BaseEstimator
+from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
+from sklearn.base import BaseEstimator, clone
 from sklearn.calibration import _SigmoidCalibration
 from sklearn.isotonic import IsotonicRegression
-
+import quapy.functional as F
 import util
 from calibrator import cal_acc_error, get_weight_feature_space
 from lascal import Calibrator
@@ -248,28 +249,107 @@ class EM(CalibratorSimple):
 
 
 class PACCcal(CalibratorSimple):
-    POST_PROCESSING = ['clip', 'softmax']
+    POST_PROCESSING = ['clip', 'softmax', 'logistic', 'isotonic']
     def __init__(self, P, y, post_proc='clip'):
         assert post_proc in PACCcal.POST_PROCESSING, 'unknown post_proc method'
         PteCond = PACC.getPteCondEstim(classes=[0,1], y=y, y_=P)
         self.tpr = PteCond[1,1]
         self.fpr = PteCond[1,0]
         self.post_proc = post_proc
+        if post_proc=='logistic':
+            cal = self._transform(P)
+            self.regressor = _SigmoidCalibration()
+            self.regressor.fit(cal, y)
+        elif post_proc == 'isotonic':
+            cal = self._transform(P)
+            self.regressor = IsotonicRegression(out_of_bounds="clip")
+            self.regressor.fit(cal, y)
 
-    def calibrate(self, P):
+    def _transform(self, P):
         tpr, fpr = self.tpr, self.fpr
-        denom = tpr-fpr
+        denom = tpr - fpr
         if denom > 0:
-            Zpos = P[:, 1]
-            calib = (Zpos-fpr) / (tpr-fpr)
-            if self.post_proc == 'clip':
-                calib = qp.functional.as_binary_prevalence(calib, clip_if_necessary=True)
-            else:
-                calib = softmax(np.asarray([1-calib, calib]).T, axis=1)
+            Ppos = P[:, 1]
+            calib = (Ppos - fpr) / (tpr - fpr)
             return calib
         else:
-            return P
+            return P[:,1]
 
+    def calibrate(self, P):
+        Ppos = self._transform(P)
+        if self.post_proc == 'clip':
+            calib = qp.functional.as_binary_prevalence(Ppos, clip_if_necessary=True)
+        elif (Ppos>1).any() or (Ppos<0).any():
+            if self.post_proc == 'softmax':
+                calib = softmax(np.asarray([1 - Ppos, Ppos]).T, axis=1)
+            else:
+                if (Ppos>1).any() or (Ppos<0).any():
+                    Ppos = self.regressor.predict(Ppos)
+                calib = np.asarray([1-Ppos,Ppos]).T
+        return calib
+
+
+class QuantifyBinsCalibrator_depr(CalibratorSimple): # does not work at all
+    def __init__(self, classifier, quantifier_cls, nbins=8):
+        self.classifier = classifier
+        self.quantifier_cls = quantifier_cls
+        self.bins=np.linspace(0, 1, nbins+1)
+        self.bins[-1]+=1e-5
+
+    def fit(self, P, y):
+        posteriors = P[:,1]
+        self.quantifiers=[]
+        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
+            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+            if sum(sel)>0 and sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
+                lc = LabelledCollection(P[sel], y[sel], classes=[0,1])
+                q_bin = self.quantifier_cls(clone(self.classifier)).fit(lc)
+                self.quantifiers.append(q_bin)
+            else:
+                self.quantifiers.append(None)
+        return self
+
+    def calibrate(self, P):
+        posteriors = P[:,1]
+        calibrated = np.zeros_like(posteriors, dtype=float)
+        for bin_low, bin_high, quant in zip(self.bins[:-1],self.bins[1:], self.quantifiers):
+            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+            binsize = sum(sel)
+            if quant is not None and binsize>0:
+                prev = quant.quantify(P[sel])[1]
+            else:
+                prev = 0.5
+            calibrated[sel] = prev
+
+        calibrated = np.asarray([1-calibrated, calibrated]).T
+        return calibrated
+
+
+class QuantifyCalibrator(CalibratorCompound):
+    def __init__(self, classifier, quantifier_cls, nbins=5):
+        self.classifier = classifier
+        self.quantifier = quantifier_cls()
+        self.bins = np.linspace(0, 1, nbins + 1)
+        self.bins[-1] += 1e-5
+
+    def fit(self, X, y):
+        self.quantifier.fit(LabelledCollection(X,y,classes=[0,1]))
+        return self
+
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+        posteriors = Ztgt[:,1]
+        calibrated = np.zeros_like(posteriors, dtype=float)
+        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
+            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+            binsize = sum(sel)
+            if binsize>0:
+                prev = self.quantifier.quantify(Ftgt[sel])[1]
+            else:
+                prev = 0.5
+            calibrated[sel] = prev
+
+        calibrated = np.asarray([1-calibrated, calibrated]).T
+        return calibrated
 
 # ----------------------------------------------------------
 # Under Covariate Shift
@@ -329,11 +409,10 @@ class CpcsCalibrator(CalibratorCompound):
 # HeadToTail [Chen and Su, 2023]
 class HeadToTailCalibrator(CalibratorCompound):
 
-    def __init__(self, prob2logits=True, verbose=False):
-        self.verbose = verbose
+    def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Fte, Ztgt):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
         if self.prob2logits:
             Zsrc = np_prob2logit(Zsrc)
             Ztgt = np_prob2logit(Ztgt)
@@ -345,11 +424,8 @@ class HeadToTailCalibrator(CalibratorCompound):
             labels=ysrc,
             train_features=Ftr,
             train_labels=ytr,
-            verbose=self.verbose,
         )
         optim_temp = head_to_tail.find_best_T(Zsrc, ysrc)
-        if self.verbose:
-            print(f"Temperature found with HeadToTail is: {optim_temp[0]}")
 
         y_logits = Ztgt / optim_temp
         Pte_recalib = softmax(y_logits, axis=-1)

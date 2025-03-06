@@ -3,6 +3,7 @@ from quapy.protocol import UPP
 from sklearn.linear_model import LogisticRegression
 
 from model.classifier_accuracy_predictors import *
+from model.classifier_calibrators import CpcsCalibrator, HeadToTailCalibrator
 from util import accuracy, cap_error
 import quapy as qp
 from tqdm import tqdm
@@ -51,9 +52,15 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
     # Calibration 2 CAP
-    yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
+    yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    # yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    # yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    # yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    # yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
     yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(Xva, yva)
-    yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
+    # yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
 
     # Quantification 2 CAP
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
@@ -115,9 +122,10 @@ print(df)
 print(pivot)
 print(pivot.mean(axis=0))
 
-from new_table import WithConfigurationLatexTable
+from new_table import LatexTable
 
-table = WithConfigurationLatexTable.from_dataframe(df, method='method', benchmark='dataset', value='err')
+table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', value='err')
 table.name = 'cap_pps'
 table.reorder_methods(methods_order)
+table.format.configuration.show_std=False
 table.latexPDF('./tables/cap.pdf')
