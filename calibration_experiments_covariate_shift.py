@@ -140,7 +140,7 @@ for setup in pbar:
                 ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
                 brier_score = brier_score_loss(y_true=test_sample.labels, y_proba=calib_posteriors[:, 1])
                 ece_ave.append(ece)
-                pbar.set_description(description + f' {cal_name} ({idx}/{REPEATS}) ECE-ave={np.mean(ece_ave)}')
+                pbar.set_description(description + f' {cal_name} ({idx}/{REPEATS}) ECE-ave={np.mean(ece_ave):.5f}')
 
                 result = ResultRow(
                     dataset=f'{setup.source}->{setup.target}',
