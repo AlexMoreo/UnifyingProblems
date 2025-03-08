@@ -1,12 +1,14 @@
 from itertools import product
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from quapy.protocol import NaturalPrevalenceProtocol
 import torch
 from os.path import join
 import numpy as np
 from sklearn.metrics import brier_score_loss
 from sympy.multipledispatch.dispatcher import source
+import pandas as pd
+from tqdm import tqdm
 
 from model.classifier_calibrators import *
 from util import cal_error
@@ -49,15 +51,17 @@ class Setup:
 sentiment_datasets = ['imdb', 'rt', 'yelp']
 models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 
+
 def calibrators():
     # valid_posteriors = softmax(valid_logits, axis=1)
     # test_posteriors = softmax(test_logits, axis=1)
     # yield 'EM', EM(train_prevalence=np.mean(train_y))
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
-    yield 'TransCal', TransCalCalibrator(prob2logits=False)
+    #yield 'TransCal', TransCalCalibrator(prob2logits=False)
     # yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
-    yield 'LasCal', LasCalCalibration(prob2logits=False)
+    #yield 'LasCal', LasCalCalibration(prob2logits=False)
+
 
 def get_calibrated_posteriors(calibrator, train, valid, test):
     if isinstance(calibrator, CalibratorCompound):
@@ -74,9 +78,6 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
         calib_posteriors = calibrator.calibrate(P=softmax(test.logits, axis=1))
 
     return calib_posteriors
-
-
-
 
 
 def iterate_datasets():
@@ -118,32 +119,56 @@ def yield_random_samples(test: Dataset, repeats, samplesize):
         yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels)
 
 
+total_setups = len(models)*(len(sentiment_datasets)**2)
 all_results = []
 method_order = []
 
-for setup in iterate_datasets():
+pbar = tqdm(iterate_datasets(), total=total_setups)
+for setup in pbar:
+    description = f'[{setup.model}]::{setup.source}->{setup.target}'
 
-    for idx, test_sample in enumerate(yield_random_samples(setup.test, repeats=REPEATS, samplesize=SAMPLESIZE)):
+    for cal_name, calibrator in calibrators():
+        result_method_setup_path = join(result_dir, f'{cal_name}_{setup.model}_{setup.source}__{setup.target}.csv')
+        if os.path.exists(result_method_setup_path):
+            report = pd.read_csv(result_method_setup_path)
+        else:
+            method_setup_results = []
+            ece_ave = []
+            for idx, test_sample in enumerate(yield_random_samples(setup.test, repeats=REPEATS, samplesize=SAMPLESIZE)):
+                calib_posteriors = get_calibrated_posteriors(calibrator, setup.train, setup.valid, test_sample)
 
-        print(f'[{setup.model}]::{setup.source}->{setup.target}')
+                ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
+                brier_score = brier_score_loss(y_true=test_sample.labels, y_proba=calib_posteriors[:, 1])
+                ece_ave.append(ece)
+                pbar.set_description(description + f' {cal_name} ({idx}/{REPEATS}) ECE-ave={np.mean(ece_ave)}')
 
-        for cal_name, calibrator in calibrators():
+                result = ResultRow(
+                    dataset=f'{setup.source}->{setup.target}',
+                    source=setup.source,
+                    target=setup.target,
+                    id=idx,
+                    method=cal_name,
+                    classifier=setup.model,
+                    ece=ece,
+                    brier=brier_score
+                )
 
-            calib_posteriors = get_calibrated_posteriors(calibrator, setup.train, setup.valid, test_sample)
+                method_setup_results.append(asdict(result))
 
-            ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
-            brier_score = brier_score_loss(y_true=test_sample.labels, y_proba=calib_posteriors[:, 1])
+            report = pd.DataFrame(method_setup_results)
+            report.to_csv(result_method_setup_path, index=False)
 
-            print(f'\t{cal_name} got ECE={ece:.5f}')
-            result = ResultRow(
-                dataset=f'{setup.source}->{setup.target}',
-                source=setup.source,
-                target=setup.target,
-                id=idx,
-                method=cal_name,
-                ece=ece,
-                brier=brier_score
-            )
+        all_results.append(report)
+
+df = pd.concat(all_results)
+pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='ece')
+print('ECE')
+print(pivot)
+
+pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='brier')
+print('Brier score')
+print(pivot)
+
 
 
 
