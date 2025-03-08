@@ -36,7 +36,8 @@ Methods:
 # There should be clear whether Xva, Pva, yva is representative from P or from Q
 
 REPEATS = 100
-result_dir = f'results/calibration/label_shift/repeats_{REPEATS}'
+SAMPLE_SIZE=250
+result_dir = f'results/calibration/label_shift/repeats_{REPEATS}_samplesize_{SAMPLE_SIZE}'
 os.makedirs(result_dir, exist_ok=True)
 
 datasets_selected = datasets(top_length_k=10)
@@ -145,7 +146,7 @@ for dataset, (cls_name, cls) in pbar:
     Pva = cls.predict_proba(Xva)
 
     # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
-    app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
+    app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, return_type='labelled_collection')
 
     for name, calibrator in calibration_methods(cls, Pva, yva, train):
         if name not in method_order:

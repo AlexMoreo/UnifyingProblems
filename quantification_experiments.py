@@ -16,7 +16,8 @@ import numpy as np
 from model.quantifiers import *
 
 REPEATS = 100
-result_dir = f'results/quantification/label_shift/repeats_{REPEATS}'
+SAMPLE_SIZE=250
+result_dir = f'results/quantification/label_shift/repeats_{REPEATS}_samplesize_{SAMPLE_SIZE}'
 os.makedirs(result_dir, exist_ok=True)
 
 datasets_selected = datasets(top_length_k=10)
@@ -26,7 +27,7 @@ def new_labelshift_protocol(X, y, classes):
     lc = LabelledCollection(X, y, classes=classes)
     app = ArtificialPrevalenceProtocol(
         lc,
-        sample_size=len(lc),
+        sample_size=SAMPLE_SIZE,
         repeats=REPEATS,
         return_type='labelled_collection',
         random_state=0
@@ -83,8 +84,8 @@ for dataset in pbar:
     train_prev = train.prevalence()
 
     train, val = train.split_stratified(0.5, random_state=0)
-    app = UPP(test, sample_size=len(test), repeats=REPEATS, random_state=0)
-    qp.environ['SAMPLE_SIZE'] = len(test)
+    app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0)
+    qp.environ['SAMPLE_SIZE'] = SAMPLE_SIZE
 
     h = LogisticRegression()
     h.fit(*train.Xy)

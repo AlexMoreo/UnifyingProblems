@@ -15,19 +15,11 @@ from dataclasses import dataclass, asdict
 import pandas as pd
 
 
-"""
-Methods:
-- Naive [baseline]
-- LEAP, ATC, DoC [proper CAP methods]
-- Lascal2Cap [a method from calibration]
-- PACC2C [a method from quantification]
-- HDC2C [a method from calibration that comes from quantification]
-"""
-
 DOC_VAL_SAMPLES = 50
 REPEATS = 100
+SAMPLE_SIZE=250
 
-result_dir = f'results/classifier_accuracy_prediction/label_shift/repeats_{REPEATS}'
+result_dir = f'results/classifier_accuracy_prediction/label_shift/repeats_{REPEATS}_samplesize_{SAMPLE_SIZE}'
 os.makedirs(result_dir, exist_ok=True)
 
 datasets_selected = datasets(top_length_k=10)
@@ -40,6 +32,7 @@ class ResultRow:
     shift: float
     err: float
 
+
 def cap_methods(h:BaseEstimator, Xva, yva):
 
     # CAP methods
@@ -47,7 +40,7 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'ATC', ATC(h).fit(Xva, yva)
     # yield 'ATC-ne', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva) <- wrong implementation? redo in the next line
     # yield 'ATC-ne2', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva)
-    val_prot = UPP(val, sample_size=len(val), repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
+    val_prot = UPP(val, sample_size=SAMPLE_SIZE, repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
@@ -88,7 +81,7 @@ for dataset in pbar:
     Xva, yva = val.Xy
 
     # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
-    app = UPP(test, sample_size=len(test), repeats=REPEATS, return_type='labelled_collection')
+    app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, return_type='labelled_collection')
 
     for name, cap_method in cap_methods(h, Xva, yva):
         if name not in methods_order:
