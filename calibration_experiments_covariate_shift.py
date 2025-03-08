@@ -82,17 +82,23 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
 
 def iterate_datasets():
 
-    def load_dataset(path, domain, splitname):
+    def load_dataset(path, domain, splitname, reduce=None, random_seed=0):
         hidden = torch.load(join(path, f'{domain}.{splitname}.hidden_states.pt')).numpy()
         logits = torch.load(join(path, f'{domain}.{splitname}.logits.pt')).numpy()
         labels = torch.load(join(path, f'{domain}.{splitname}.labels.pt')).numpy()
+        if reduce is not None and isinstance(reduce,int) and reduce<len(labels):
+            np.random.seed(random_seed)
+            sel_idx = np.random.choice(reduce, size=reduce, replace=False)
+            hidden = hidden[sel_idx]
+            logits = logits[sel_idx]
+            labels = labels[sel_idx]
         return Dataset(hidden=hidden, logits=logits, labels=labels)
 
     for source in sentiment_datasets:
         for model in models:
             path = f'./neural_training/embeds/{source}/{model}'
 
-            train = load_dataset(path, 'source', 'train')
+            train = load_dataset(path, 'source', 'train', reduce=5000)
             valid = load_dataset(path, 'source', 'validation')
 
             for target in sentiment_datasets:
