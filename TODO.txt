@@ -1,3 +1,15 @@
+- Add to requirements LasCal stuff: clone project, install:
+    - rich, cvxpy
+
+Running:
+- oficina:
+    cap_experiments at 250
+    calibration covariate_shift Cpcs
+- barracuda
+    calibration covariate_shift Lascal
+    calibration covariate_shift Transcal [completo]
+    calibration covariate_shift Head2Tail [lo he parado, va demasiado lento]
+
 - Experiments all: reconsider size? currently is len(test)
 - Add classifiers (MLP o deep, LR, kNN, SVM, DecisionTrees) to calibration experiments
 - Add covariate shift experiments

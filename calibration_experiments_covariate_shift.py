@@ -37,7 +37,9 @@ class ResultRow:
 class Dataset:
     hidden: np.ndarray
     logits: np.ndarray
+    posteriors: np.ndarray
     labels: np.ndarray
+    prevalence: np.ndarray
 
 @dataclass
 class Setup:
@@ -48,19 +50,50 @@ class Setup:
     valid: Dataset
     test: Dataset
 
+
 sentiment_datasets = ['imdb', 'rt', 'yelp']
 models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 
 
-def calibrators():
+def calibrators(setup):
     # valid_posteriors = softmax(valid_logits, axis=1)
     # test_posteriors = softmax(test_logits, axis=1)
-    yield 'EM', EM(train_prevalence=np.mean(train_y))
+    yield 'EM', EM(train_prevalence=setup.train.prevalence)
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
-    # yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
+    #yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
     yield 'LasCal', LasCalCalibration(prob2logits=False)
+
+    #for nbins in [8]: #20, 25, 30, 35, 40]:
+    #    dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
+    #    preclassified = LabelledCollection(Pva, yva)
+    #    dm.aggregation_fit(classif_predictions=preclassified, data=val)
+        # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
+        # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
+    #    yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+        # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
+        # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+
+    Pva = setup.valid.posteriors
+    yva = setup.valid.labels
+    yield 'PACC-cal', PACCcal(Pva, yva)
+    yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
+    yield 'PACC-cal(log)2', PACCcal(Pva, yva, post_proc='logistic')
+    yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
+    yield 'PACC-cal(iso)2', PACCcal(Pva, yva, post_proc='isotonic')
+
+    # yield 'Bin-PACC', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC).fit(Pva, yva)
+    # yield 'Bin-PACC2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=2).fit(Pva, yva)
+    # yield 'Bin-PACC5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Pva, yva)
+    #yield 'Bin2-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Xva, yva)
+    # yield 'Bin-EM', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ).fit(Pva, yva)
+    # yield 'Bin-EM2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=2).fit(Pva, yva)
+    # yield 'Bin-EM5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Pva, yva)
+    #yield 'Bin2-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
+    #yield 'Bin2-DM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=DistributionMatchingY, nbins=5).fit(Xva, yva)
 
 
 def get_calibrated_posteriors(calibrator, train, valid, test):
@@ -92,7 +125,9 @@ def iterate_datasets():
             hidden = hidden[sel_idx]
             logits = logits[sel_idx]
             labels = labels[sel_idx]
-        return Dataset(hidden=hidden, logits=logits, labels=labels)
+        posteriors = softmax(logits, axis=1)
+        prevalence = F.prevalence_from_labels(labels, classes=[0,1])
+        return Dataset(hidden=hidden, logits=logits, posteriors=posteriors, prevalence=prevalence, labels=labels)
 
     for source in sentiment_datasets:
         for model in models:
@@ -133,7 +168,7 @@ pbar = tqdm(iterate_datasets(), total=total_setups)
 for setup in pbar:
     description = f'[{setup.model}]::{setup.source}->{setup.target}'
 
-    for cal_name, calibrator in calibrators():
+    for cal_name, calibrator in calibrators(setup):
         result_method_setup_path = join(result_dir, f'{cal_name}_{setup.model}_{setup.source}__{setup.target}.csv')
         if os.path.exists(result_method_setup_path):
             report = pd.read_csv(result_method_setup_path)
