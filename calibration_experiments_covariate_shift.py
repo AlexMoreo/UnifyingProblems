@@ -60,18 +60,18 @@ def calibrators(setup):
     # test_posteriors = softmax(test_logits, axis=1)
     yield 'EM', EM(train_prevalence=setup.train.prevalence)
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
-    #yield 'TransCal', TransCalCalibrator(prob2logits=False)
-    yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
+    yield 'TransCal', TransCalCalibrator(prob2logits=False)
+    #yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
-    #yield 'LasCal', LasCalCalibration(prob2logits=False)
+    yield 'LasCal', LasCalCalibration(prob2logits=False)
 
-    for nbins in [8]: #20, 25, 30, 35, 40]:
-        dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
-        preclassified = LabelledCollection(Pva, yva)
-        dm.aggregation_fit(classif_predictions=preclassified, data=val)
+    #for nbins in [8]: #20, 25, 30, 35, 40]:
+    #    dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
+    #    preclassified = LabelledCollection(Pva, yva)
+    #    dm.aggregation_fit(classif_predictions=preclassified, data=val)
         # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
         # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
-        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+    #    yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
 
