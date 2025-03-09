@@ -171,6 +171,9 @@ for setup in pbar:
     description = f'[{setup.model}]::{setup.source}->{setup.target}'
 
     for cal_name, calibrator in calibrators(setup):
+        if cal_name not in method_order:
+            method_order.append(cal_name)
+
         result_method_setup_path = join(result_dir, f'{cal_name}_{setup.model}_{setup.source}__{setup.target}.csv')
         if os.path.exists(result_method_setup_path):
             report = pd.read_csv(result_method_setup_path)
@@ -211,6 +214,27 @@ print(pivot)
 pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='brier')
 print('Brier score')
 print(pivot)
+
+from result_table.src.new_table import LatexTable
+
+tables = []
+for classifier_name, _ in models:
+    df_h = df[df['classifier']==classifier_name]
+    table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
+    table_ece.name = f'calibration_cv_ECE_{classifier_name}'
+    table_ece.reorder_methods(method_order)
+    table_ece.format.configuration.show_std=False
+    table_ece.format.configuration.side_columns = True
+    tables.append(table_ece)
+
+    table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
+    table_brier.name = f'calibration_cv_brier_{classifier_name}'
+    table_brier.reorder_methods(method_order)
+    table_brier.format.configuration.show_std = False
+    table_brier.format.configuration.side_columns = True
+    tables.append(table_brier)
+
+LatexTable.LatexPDF(f'./tables/calibration_covariate_shift.pdf', tables)
 
 
 
