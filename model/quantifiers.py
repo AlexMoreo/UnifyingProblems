@@ -20,8 +20,8 @@ class ATC2Quant(BaseQuantifier):
 
     def __init__(self, classifier: BaseEstimator):
         self.h = classifier
-        self.cap_pos = ATC(classifier=clone(classifier))
-        self.cap_neg = ATC(classifier=clone(classifier))
+        self.cap_pos = ATC(classifier=classifier)
+        self.cap_neg = ATC(classifier=classifier)
 
     def fit(self, data: LabelledCollection):
         X, y = data.Xy

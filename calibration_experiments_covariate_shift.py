@@ -58,7 +58,7 @@ models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 def calibrators(setup):
     Pva = setup.valid.posteriors
     yva = setup.valid.labels
-    
+
     yield 'Uncal', UncalibratedWrap()
     # yield 'NaiveUncertain', NaiveUncertain()
     # yield 'NaiveTrain', NaiveUncertain(train_prev)
