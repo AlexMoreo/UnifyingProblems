@@ -111,15 +111,14 @@ class IsotonicCalibration(CalibratorSimple):
 
 class LasCalCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False, prob2logits=True):
-        self.verbose = verbose
+    def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
         calibrator = Calibrator(
             experiment_path=None,
-            verbose=self.verbose,
+            verbose=False,
             covariate=False,
         )
 
@@ -151,15 +150,14 @@ class LasCalCalibration(CalibratorSourceTarget):
 
 class EMBCTSCalibration(CalibratorSourceTarget):
 
-    def __init__(self, verbose=False, prob2logits=True):
-        self.verbose = verbose
+    def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
     def calibrate(self, Zsrc, ysrc, Ztgt):
 
         calibrator = Calibrator(
             experiment_path=None,
-            verbose=self.verbose,
+            verbose=False,
             covariate=False,
         )
 
