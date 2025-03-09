@@ -55,12 +55,12 @@ models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 def calibrators():
     # valid_posteriors = softmax(valid_logits, axis=1)
     # test_posteriors = softmax(test_logits, axis=1)
-    # yield 'EM', EM(train_prevalence=np.mean(train_y))
+    yield 'EM', EM(train_prevalence=np.mean(train_y))
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
-    #yield 'TransCal', TransCalCalibrator(prob2logits=False)
+    yield 'TransCal', TransCalCalibrator(prob2logits=False)
     # yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
-    #yield 'LasCal', LasCalCalibration(prob2logits=False)
+    yield 'LasCal', LasCalCalibration(prob2logits=False)
 
 
 def get_calibrated_posteriors(calibrator, train, valid, test):
