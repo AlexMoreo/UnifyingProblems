@@ -157,7 +157,9 @@ def yield_random_samples(test: Dataset, repeats, samplesize):
         sample_hidden = test.hidden[index]
         sample_logits = test.logits[index]
         sample_labels = test.labels[index]
-        yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels)
+        sample_posteriors = test.posteriors[index]
+        sample_prevalence = F.prevalence_from_labels(sample_labels, classes=[0,1])
+        yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels, posteriors=sample_posteriors, prevalence=sample_prevalence)
 
 
 total_setups = len(models)*(len(sentiment_datasets)**2)
