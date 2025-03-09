@@ -56,8 +56,17 @@ models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 
 
 def calibrators(setup):
-    # valid_posteriors = softmax(valid_logits, axis=1)
-    # test_posteriors = softmax(test_logits, axis=1)
+    Pva = setup.valid.posteriors
+    yva = setup.valid.labels
+    
+    yield 'Uncal', UncalibratedWrap()
+    # yield 'NaiveUncertain', NaiveUncertain()
+    # yield 'NaiveTrain', NaiveUncertain(train_prev)
+
+    # proper calibration methods
+    yield 'Platt', PlattScaling().fit(Pva, yva)
+    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+
     yield 'EM', EM(train_prevalence=setup.train.prevalence)
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
@@ -75,8 +84,7 @@ def calibrators(setup):
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
 
-    Pva = setup.valid.posteriors
-    yva = setup.valid.labels
+
     yield 'PACC-cal', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
     #yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
