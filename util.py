@@ -2,6 +2,7 @@ import quapy as qp
 import numpy as np
 import scipy
 import pandas as pd
+from pandas import DataFrame
 import torch
 
 from lascal import Ece
@@ -67,3 +68,11 @@ def accuracy(y_true, y_pred):
 
 def accuracy_from_contingency_table(ct):
     return np.diagonal(ct).sum() / ct.sum()
+
+def count_successes(df: DataFrame, baselines):
+    datasets = df.dataset.unique()
+    methods = df.method.unique()
+    n_datasets = len(datasets)
+    n_methods = len(methods)
+    n_experiments = df.id
+    outcomes = np.zeros(shape=())

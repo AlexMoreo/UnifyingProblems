@@ -101,6 +101,7 @@ for dataset in pbar:
             fit_quantifier(quant, train, val)
             report = qp.evaluation.evaluation_report(quant, protocol=app, error_metrics=['ae', 'rae'])
             true_prevs = np.vstack(report['true-prev'])
+            report['id'] = np.arange(REPEATS)
             report['shift'] = qp.error.ae(true_prevs, np.tile(train_prev, (REPEATS, 1)))
             report['method'] = name
             report['dataset'] = dataset
