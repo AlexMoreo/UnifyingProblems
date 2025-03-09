@@ -116,7 +116,7 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
             Zsrc=valid.logits, ysrc=valid.labels, Ztgt=test.logits
         )
     elif isinstance(calibrator, CalibratorSimple):
-        calib_posteriors = calibrator.calibrate(P=test.posteriors)
+        calib_posteriors = calibrator.calibrate(test.posteriors)
 
     return calib_posteriors
 
