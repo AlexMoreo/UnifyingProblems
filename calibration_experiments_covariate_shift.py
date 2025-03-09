@@ -79,11 +79,11 @@ def calibrators(setup):
     yva = setup.valid.labels
     yield 'PACC-cal', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
-    yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
+    #yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
     yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
-    yield 'PACC-cal(log)2', PACCcal(Pva, yva, post_proc='logistic')
+    #yield 'PACC-cal(log)2', PACCcal(Pva, yva, post_proc='logistic')
     yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
-    yield 'PACC-cal(iso)2', PACCcal(Pva, yva, post_proc='isotonic')
+    #yield 'PACC-cal(iso)2', PACCcal(Pva, yva, post_proc='isotonic')
 
     # yield 'Bin-PACC', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC).fit(Pva, yva)
     # yield 'Bin-PACC2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=2).fit(Pva, yva)
@@ -108,7 +108,7 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
             Zsrc=valid.logits, ysrc=valid.labels, Ztgt=test.logits
         )
     elif isinstance(calibrator, CalibratorSimple):
-        calib_posteriors = calibrator.calibrate(P=softmax(test.logits, axis=1))
+        calib_posteriors = calibrator.calibrate(P=test.posteriors)
 
     return calib_posteriors
 
@@ -215,10 +215,10 @@ pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values
 print('Brier score')
 print(pivot)
 
-from result_table.src.new_table import LatexTable
+from new_table import LatexTable
 
 tables = []
-for classifier_name, _ in models:
+for classifier_name in models:
     df_h = df[df['classifier']==classifier_name]
     table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
     table_ece.name = f'calibration_cv_ECE_{classifier_name}'
