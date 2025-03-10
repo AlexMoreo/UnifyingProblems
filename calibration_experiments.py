@@ -117,7 +117,7 @@ def calibration_methods(classifier, Pva, yva, train):
         return app
 
 
-    #yield 'Bin-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=doc_prot), nbins=6).fit(Xva, yva)
+    yield 'Bin-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_labelshift_protocol(Xva,yva,[0,1])), nbins=6).fit(Xva, yva)
     yield 'Bin-LEAP6', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6).fit(Xva, yva)
 
 
