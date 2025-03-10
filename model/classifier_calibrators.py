@@ -480,9 +480,9 @@ class CAPCalibrator(CalibratorCompound):
             binsize = sum(sel)
             if binsize > 0:
                 estim_acc = self.cap.predict(Ftgt[sel])
-                estim_positives = estim_acc if bin_center>0.5 else (1-estim_acc)
+                estim_positives = estim_acc if bin_center>0.5 else (1.-estim_acc)
             else:
-                estim_positives = np.mean(posteriors[sel])
+                estim_positives = 0.5
             calibration_coord.append(bin_center)
             calibrated_values.append(estim_positives)
 
