@@ -39,8 +39,10 @@ def np2tensor(scores, probability_to_logit=False):
         scores = torch.log(scores)
     return scores
 
+
 def np_prob2logit(prob):
     return np2tensor(prob, probability_to_logit=True).numpy()
+
 
 # ----------------------------------------------------------
 # Baseline methods
@@ -323,6 +325,8 @@ class QuantifyBinsCalibrator_depr(CalibratorSimple): # does not work at all
         return calibrated
 
 
+
+
 class QuantifyCalibrator(CalibratorCompound):
     def __init__(self, classifier, quantifier_cls, nbins=5):
         self.classifier = classifier
@@ -334,7 +338,7 @@ class QuantifyCalibrator(CalibratorCompound):
         self.quantifier.fit(LabelledCollection(X,y,classes=[0,1]))
         return self
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+    def calibrate_depr(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):  # only returns nbins different values...
         posteriors = Ztgt[:,1]
         calibrated = np.zeros_like(posteriors, dtype=float)
         for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
@@ -347,6 +351,26 @@ class QuantifyCalibrator(CalibratorCompound):
             calibrated[sel] = prev
 
         calibrated = np.asarray([1-calibrated, calibrated]).T
+        return calibrated
+
+    def calibrate_(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+        posteriors = Ztgt[:,1]
+        calibration_coord = []
+        calibrated_values = []
+        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
+            bin_center = (bin_low + bin_high) / 2
+            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+            binsize = sum(sel)
+            if binsize>0:
+                prev = self.quantifier.quantify(Ftgt[sel])[1]
+            else:
+                prev = bin_center  # <- akin to not modifying the bin prediction
+            calibration_coord.append(bin_center)
+            calibrated_values.append(prev)
+
+        calibrated_posteriors = np.interp(posteriors, xp=calibration_coord, fp=calibrated_values)
+
+        calibrated = np.asarray([1 - calibrated_posteriors, calibrated_posteriors]).T
         return calibrated
 
 # ----------------------------------------------------------
@@ -429,4 +453,44 @@ class HeadToTailCalibrator(CalibratorCompound):
         Pte_recalib = softmax(y_logits, axis=-1)
         return Pte_recalib
 
+
+# ---------------------------------------------------------------
+# Based on CAP
+# ---------------------------------------------------------------
+class CAPCalibrator(CalibratorCompound):
+
+    def __init__(self, classifier, cap_cls, nbins=6):
+        assert nbins%2==0, f'unexpected number of bins {nbins}; use an odd number of bins'
+        self.classifier = classifier
+        self.cap = cap_cls()
+        self.bins = np.linspace(0, 1, nbins + 1)
+        self.bins[-1] += 1e-5
+
+    def fit(self, X, y):
+        self.cap.fit(X, y)
+        return self
+
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+        posteriors = Ztgt[:, 1]
+        calibration_coord = []
+        calibrated_values = []
+        for bin_low, bin_high in zip(self.bins[:-1], self.bins[1:]):
+            bin_center = (bin_low+bin_high)/2
+            sel = np.logical_and(posteriors >= bin_low, posteriors < bin_high)
+            binsize = sum(sel)
+            if binsize > 0:
+                estim_acc = self.cap.predict(Ftgt[sel])
+                estim_positives = estim_acc if bin_center>0.5 else (1-estim_acc)
+            else:
+                estim_positives = np.mean(posteriors[sel])
+            calibration_coord.append(bin_center)
+            calibrated_values.append(estim_positives)
+
+        calibration_coord = [0.] + calibration_coord + [1.]
+        calibrated_values = [0.] + calibrated_values + [1.]
+
+        calibrated_posteriors = np.interp(posteriors, xp=calibration_coord, fp=calibrated_values)
+
+        calibrated = np.asarray([1 - calibrated_posteriors, calibrated_posteriors]).T
+        return calibrated
 
