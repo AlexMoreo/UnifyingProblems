@@ -353,7 +353,7 @@ class QuantifyCalibrator(CalibratorCompound):
         calibrated = np.asarray([1-calibrated, calibrated]).T
         return calibrated
 
-    def calibrate_(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
         posteriors = Ztgt[:,1]
         calibration_coord = []
         calibrated_values = []
