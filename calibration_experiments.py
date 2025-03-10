@@ -14,12 +14,13 @@ from tqdm import tqdm
 import quapy as qp
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import DistributionMatchingY, KDEyML
-from quapy.protocol import UPP
+from quapy.protocol import UPP, ArtificialPrevalenceProtocol
 from dataclasses import dataclass, asdict
 from util import cal_error, datasets
 import os
 from os.path import join
 from sklearn.metrics import brier_score_loss
+from model.classifier_accuracy_predictors import ATC, DoC, LEAP
 
 """
 Methods:
@@ -102,6 +103,22 @@ def calibration_methods(classifier, Pva, yva, train):
     yield 'Bin3-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5).fit(Xva, yva)
 
     # from cap
+    yield 'Bin-ATC6', CAPCalibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6).fit(Xva, yva)
+
+    def new_labelshift_protocol(X, y, classes):
+        lc = LabelledCollection(X, y, classes=classes)
+        app = ArtificialPrevalenceProtocol(
+            lc,
+            sample_size=SAMPLE_SIZE,
+            repeats=REPEATS,
+            return_type='labelled_collection',
+            random_state=0
+        )
+        return app
+
+
+    #yield 'Bin-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=doc_prot), nbins=6).fit(Xva, yva)
+    yield 'Bin-ATC6', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6).fit(Xva, yva)
 
 
 

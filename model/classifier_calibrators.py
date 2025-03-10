@@ -459,10 +459,10 @@ class HeadToTailCalibrator(CalibratorCompound):
 # ---------------------------------------------------------------
 class CAPCalibrator(CalibratorCompound):
 
-    def __init__(self, classifier, cap_cls, nbins=6):
+    def __init__(self, classifier, cap_method, nbins=6):
         assert nbins%2==0, f'unexpected number of bins {nbins}; use an odd number of bins'
         self.classifier = classifier
-        self.cap = cap_cls()
+        self.cap = cap_method
         self.bins = np.linspace(0, 1, nbins + 1)
         self.bins[-1] += 1e-5
 
