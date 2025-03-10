@@ -13,7 +13,7 @@ from model.classifier_calibrators import *
 from tqdm import tqdm
 import quapy as qp
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import DistributionMatchingY
+from quapy.method.aggregative import DistributionMatchingY, KDEyML
 from quapy.protocol import UPP
 from dataclasses import dataclass, asdict
 from util import cal_error, datasets
@@ -95,7 +95,8 @@ def calibration_methods(classifier, Pva, yva, train):
     # yield 'Bin-EM2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=2).fit(Pva, yva)
     # yield 'Bin-EM5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Pva, yva)
     yield 'Bin2-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
-    yield 'Bin2-DM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=DistributionMatchingY, nbins=5).fit(Xva, yva)
+    #yield 'Bin2-DM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=DistributionMatchingY, nbins=5).fit(Xva, yva)
+    yield 'Bin2-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5).fit(Xva, yva)
 
     # from cap
 
