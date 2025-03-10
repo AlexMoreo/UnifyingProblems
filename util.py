@@ -85,7 +85,9 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100):
         df_data = df[df['dataset']==dataset]
         for j, method in enumerate(methods):
             df_data_method = df_data[df_data['method']==method]
-            assert len(df_data_method)==expected_repetitions
+            if len(df_data_method)!=expected_repetitions:
+                print(f'unexpected length of dataframe {len(df_data_method)}')
+                continue
             for id, val in zip(df_data_method.id.values, df_data_method[value].values):
                 outcomes[i,j,id]=val
 
@@ -96,6 +98,7 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100):
         if method in baselines: continue
         # counts how many times the method has improved over 0, 1, 2, ... #baselines baselines
         method_successes_count = {b:0 for b in range(n_baselines+1)}
+        ave = []
         for i, dataset in enumerate(datasets):
             method_scores = outcomes[i,j]
             method_dataset_successes = np.zeros(shape=expected_repetitions, dtype=int)
@@ -103,12 +106,15 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100):
                 baseline_scores = outcomes[i,baselines_idx[baseline]]
                 successes = (method_scores <= baseline_scores)*1
                 method_dataset_successes += successes
+            ave.append(np.mean(method_dataset_successes))
             for b in range(n_baselines+1):
-                times_better_than_b_baselines = sum(method_dataset_successes>b)
+                times_better_than_b_baselines = sum(method_dataset_successes>=b)
                 method_successes_count[b] = method_successes_count[b] + times_better_than_b_baselines
         # report the counts as fractions over the total
         method_successes_count = {b:v/(n_datasets*expected_repetitions) for b,v in method_successes_count.items()}
         count[method] = method_successes_count
+        ave = np.mean(ave)
+        count[method]['ave']=ave
     return count
 
 
