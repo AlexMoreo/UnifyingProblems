@@ -46,7 +46,7 @@ class ClassifierAccuracyPrediction(ABC):
         ...
 
     @abstractmethod
-    def predict(self, X) -> float:
+    def predict(self, X, *args, **kwargs) -> float:
         """
         Predicts the accuracy of the classifier on X
 
@@ -66,7 +66,7 @@ class NaiveIID(ClassifierAccuracyPrediction):
         self.estim_acc = accuracy(y_true=y, y_pred=y_hat)
         return self
 
-    def predict(self, X) -> float:
+    def predict(self, X, *args, **kwargs) -> float:
         return self.estim_acc
 
 
@@ -94,7 +94,7 @@ class ATC(ClassifierAccuracyPrediction):
         _, self.threshold = self.__find_ATC_threshold(scores=scores, labels=correct_predictions)
         return self
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         posteriors = self.posterior_probabilities(X)
         scores = self._get_scores(posteriors)
         predicted_acc = self.__get_ATC_acc(self.threshold, scores)
@@ -172,7 +172,7 @@ class DoC(ClassifierAccuracyPrediction):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         posteriors = self.posterior_probabilities(X)
         mc = max_conf(posteriors)
         acc_pred = self._predict_regression(mc)[0]
@@ -233,7 +233,7 @@ class LasCal2CAP(ClassifierAccuracyPrediction):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         lascal = LasCalCalibration(prob2logits=self.probs2logits)
 
         y_hat = self.classify(X)
@@ -258,41 +258,51 @@ class CalibratorCompound2CAP(ClassifierAccuracyPrediction):
         self.ytr = ytr
         self.probs2logits = probs2logits
 
-    def fit(self, X, y):
+    def fit(self, X, y, hidden=None):
+        # if hidden is passed, then the stored features are taken from these;
+        # otherwise, the stored features are taken from the raw covariates
+
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
+        features = X if hidden is None else hidden
+
         # h(x)=1
-        self.Ppos = posteriors[y_hat == 1]
-        self.ypos = y[y_hat == 1]
-        self.Xpos = X[y_hat == 1]
+        self.P_src_pos = posteriors[y_hat == 1]
+        self.y_src_pos = y[y_hat == 1]
+        self.F_src_pos = features[y_hat == 1]
 
         # h(x)=0
-        self.Pneg = posteriors[y_hat == 0]
-        self.yneg = y[y_hat == 0]
-        self.Xneg = X[y_hat == 0]
+        self.P_src_neg = posteriors[y_hat == 0]
+        self.y_src_neg = y[y_hat == 0]
+        self.F_src_neg = features[y_hat == 0]
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, hidden=None, *args, **kwargs):
+        # if hidden is passed, then the calibration is computed on thoese; 
+        # otherwise, calibration is computed on the raw covariates
         calibrator = self.calibrator_cls(prob2logits=self.probs2logits)
 
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
-        Xpos = X[y_hat == 1]
-        Xneg = X[y_hat == 0]
-        Ppos = posteriors[y_hat == 1]
-        Pneg = posteriors[y_hat == 0]
+
+        features = X if hidden is None else hidden
+
+        F_tgt_pos = features[y_hat == 1]
+        F_tgt_neg = features[y_hat == 0]
+        P_tgt_pos = posteriors[y_hat == 1]
+        P_tgt_neg = posteriors[y_hat == 0]
 
         cal_pos = calibrator.calibrate(
             Ftr=self.Ftr, ytr=self.ytr,
-            Fsrc=self.Xpos, Zsrc=self.Ppos, ysrc=self.ypos,
-            Ftgt=Xpos, Ztgt=Ppos
+            Fsrc=self.F_src_pos, Zsrc=self.P_src_pos, ysrc=self.y_src_pos,
+            Ftgt=F_tgt_pos, Ztgt=P_tgt_pos
         )
         cal_neg = calibrator.calibrate(
             Ftr=self.Ftr, ytr=self.ytr,
-            Fsrc=self.Xneg, Zsrc=self.Pneg, ysrc=self.yneg,
-            Ftgt=Xneg, Ztgt=Pneg
+            Fsrc=self.F_src_neg, Zsrc=self.P_src_neg, ysrc=self.y_src_neg,
+            Ftgt=F_tgt_neg, Ztgt=P_tgt_neg
         )
 
         n_instances = posteriors.shape[0]
@@ -336,7 +346,7 @@ class HDC2CAP(ClassifierAccuracyPrediction):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
@@ -347,99 +357,6 @@ class HDC2CAP(ClassifierAccuracyPrediction):
         acc_pred = (cal_pos[:,1].sum() + cal_neg[:,0].sum()) / n_instances
 
         return acc_pred
-
-
-class PACC2CAP_(ClassifierAccuracyPrediction):
-
-    def __init__(self, classifier: BaseEstimator, from_posteriors=True):
-        self.classifier = classifier
-        self.from_posteriors = from_posteriors
-
-    def fit(self, val: LabelledCollection, posteriors):
-        X, y = val.Xy
-        y_hat = self.classifier.predict(X)
-
-        Cov_pos = posteriors[y_hat == 1] if self.from_posteriors else X[y_hat == 1]
-        # Xpos = X[y_hat == 1]
-        ypos = y[y_hat == 1]
-        # Ppos = posteriors[y_hat == 1]
-
-        Cov_neg = posteriors[y_hat == 0] if self.from_posteriors else X[y_hat == 0]
-        # Xneg = X[y_hat == 0]
-        yneg = y[y_hat == 0]
-        # Pneg = posteriors[y_hat == 0]
-
-        self.q_pos = PACC().fit(LabelledCollection(Cov_pos, ypos))
-
-        self.q_neg = PACC().fit(LabelledCollection(Cov_neg, yneg))
-
-        return self
-
-    def predict(self, X, posteriors, oracle_prev=None):
-        y_hat = self.classifier.predict(X)
-        Cov_pos = posteriors[y_hat == 1] if self.from_posteriors else X[y_hat == 1]
-        Cov_neg = posteriors[y_hat == 0] if self.from_posteriors else X[y_hat == 0]
-        pos_prev = self.q_pos.quantify(Cov_pos)[1]
-        neg_prev = self.q_neg.quantify(Cov_neg)[0]
-        n_instances = posteriors.shape[0]
-        n_pred_pos = y_hat.sum()
-        n_pred_neg = n_instances-n_pred_pos
-        acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
-        return acc_pred
-
-
-# class PACC2CAP(ClassifierAccuracyPrediction):
-#
-#     def __init__(self, classifier: BaseEstimator):
-#         super().__init__(classifier)
-#
-#     def fit(self, X, y):
-#         y_hat = self.classify(X)
-#         posteriors = self.posterior_probabilities(X)
-#
-#         # h(x)=1
-#         Xpos = X[y_hat == 1]
-#         ypos = y[y_hat == 1]
-#         Ppos = posteriors[y_hat == 1]
-#
-#         # h(x)=0
-#         Xneg = X[y_hat == 0]
-#         yneg = y[y_hat == 0]
-#         Pneg = posteriors[y_hat == 0]
-#
-#         # quantifier for predicted positives
-#         self.q_pos = PACC(classifier=self.h)
-#         self.q_pos.aggregation_fit(
-#             LabelledCollection(Ppos, ypos),
-#             LabelledCollection(Xpos, ypos),
-#         )
-#
-#         # quantifier for predicted negatives
-#         self.q_neg = PACC(classifier=self.h)
-#         self.q_neg.aggregation_fit(
-#             LabelledCollection(Pneg, yneg),
-#             LabelledCollection(Xneg, yneg)
-#         )
-#
-#         return self
-#
-#     def predict(self, X):
-#         y_hat = self.classify(X)
-#         posteriors = self.posterior_probabilities(X)
-#
-#         # predicted prevalence of positive instances in predicted positives
-#         pos_prev = self.q_pos.aggregate(posteriors[y_hat == 1])[1]
-#
-#         # predicted prevalence of negative instances in predicted negatives
-#         neg_prev = self.q_neg.aggregate(posteriors[y_hat == 0])[0]
-#
-#         n_instances = posteriors.shape[0]
-#         n_pred_pos = y_hat.sum()
-#         n_pred_neg = n_instances-n_pred_pos
-#
-#         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
-#
-#         return acc_pred
 
 
 class Quant2CAP(ClassifierAccuracyPrediction):
@@ -478,7 +395,7 @@ class Quant2CAP(ClassifierAccuracyPrediction):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
@@ -507,7 +424,7 @@ class LEAP(ClassifierAccuracyPrediction):
         self.q_class = q_class
         self.acc_fn = acc_fn
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         """
         Predicts the contingency table for the test data
 

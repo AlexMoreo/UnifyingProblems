@@ -13,14 +13,12 @@ from os.path import join
 from util import datasets
 from dataclasses import dataclass, asdict
 import pandas as pd
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER
 
 
-DOC_VAL_SAMPLES = 50
-REPEATS = 100
-SAMPLE_SIZE=250
-
-result_dir = f'results/classifier_accuracy_prediction/label_shift/repeats_{REPEATS}_samplesize_{SAMPLE_SIZE}'
+result_dir = f'results/classifier_accuracy_prediction/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
+
 
 datasets_selected = datasets(top_length_k=10)
 
@@ -40,7 +38,7 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'ATC', ATC(h).fit(Xva, yva)
     # yield 'ATC-ne', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva) <- wrong implementation? redo in the next line
     # yield 'ATC-ne2', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva)
-    val_prot = UPP(val, sample_size=SAMPLE_SIZE, repeats=DOC_VAL_SAMPLES, random_state=0, return_type='labelled_collection')
+    val_prot = UPP(val, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
@@ -121,4 +119,4 @@ table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', valu
 table.name = 'cap_pps'
 table.reorder_methods(methods_order)
 table.format.configuration.show_std=False
-table.latexPDF('./tables/cap.pdf')
+table.latexPDF('./tables/cap_label_shift.pdf')

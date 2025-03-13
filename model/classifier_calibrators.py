@@ -28,6 +28,11 @@ class CalibratorSourceTarget(ABC):
     def calibrate(self, Zsrc, ysrc, Ztgt):
         ...
 
+class CalibratorTarget(ABC):
+    @abstractmethod
+    def calibrate(self, Ftgt, Ztgt):
+        ...
+
 class CalibratorCompound(ABC):
     @abstractmethod
     def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
@@ -196,183 +201,6 @@ class EMBCTSCalibration(CalibratorSourceTarget):
             # print(Pte.shape)
             return Pte
 
-
-# -------------------------------------------------------------
-# Based on Quantification
-# -------------------------------------------------------------
-class HellingerDistanceCalibration(CalibratorSimple):
-
-    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False, postsmooth=False):
-        self.hdy = hdy
-        self.smooth = smooth
-        self.postsmooth=postsmooth
-        self.monotonicity = monotonicity
-
-    def calibrate(self, Z):
-        dm = self.hdy
-        nbins = dm.nbins
-        estim_prev = dm.aggregate(Z)
-        hist_neg, hist_pos = dm.validation_distribution
-        # because the histograms were computed wrt the posterior of the first class (the negative one!), we invert the order
-        # which is equivalent to computing the histogram wrt the positive class
-        hist_neg = hist_neg.flatten()[::-1]
-        hist_pos = hist_pos.flatten()[::-1]
-        hist_neg = hist_neg * estim_prev[0] + EPSILON
-        hist_pos = hist_pos * estim_prev[1] + EPSILON
-        calibration_map = hist_pos / (hist_neg + hist_pos)
-        calibration_map = np.concatenate(([0.], calibration_map, [1.]))
-
-        if self.monotonicity:
-            for i in range(1,nbins-1):
-                calibration_map[i] = max(calibration_map[i], calibration_map[i-1])
-        if self.smooth:
-            calibration_map[1:-1]=np.mean(np.vstack([calibration_map[:-2], calibration_map[1:-1], calibration_map[2:]]), axis=0)
-
-        x_coords = np.concatenate(
-            ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
-        uncalibrated_posteriors_pos = Z[:, 1]
-        posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, calibration_map)
-        if self.postsmooth:
-            posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
-        posteriors = np.asarray([1 - posteriors, posteriors]).T
-        return posteriors
-
-
-class EM(CalibratorSimple):
-    def __init__(self, train_prevalence):
-        self.emq = EMQ()
-        self.train_prevalence = train_prevalence
-
-    def calibrate(self, P):
-        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P)
-        return posteriors
-
-
-class PACCcal(CalibratorSimple):
-    POST_PROCESSING = ['clip', 'softmax', 'logistic', 'isotonic']
-    def __init__(self, P, y, post_proc='clip'):
-        assert post_proc in PACCcal.POST_PROCESSING, 'unknown post_proc method'
-        PteCond = PACC.getPteCondEstim(classes=[0,1], y=y, y_=P)
-        self.tpr = PteCond[1,1]
-        self.fpr = PteCond[1,0]
-        self.post_proc = post_proc
-        if post_proc=='logistic':
-            cal = self._transform(P)
-            self.regressor = _SigmoidCalibration()
-            self.regressor.fit(cal, y)
-        elif post_proc == 'isotonic':
-            cal = self._transform(P)
-            self.regressor = IsotonicRegression(out_of_bounds="clip")
-            self.regressor.fit(cal, y)
-
-    def _transform(self, P):
-        tpr, fpr = self.tpr, self.fpr
-        denom = tpr - fpr
-        if denom > 0:
-            Ppos = P[:, 1]
-            calib = (Ppos - fpr) / (tpr - fpr)
-            return calib
-        else:
-            return P[:,1]
-
-    def calibrate(self, P):
-        Ppos = self._transform(P)
-        if self.post_proc == 'clip':
-            calib = qp.functional.as_binary_prevalence(Ppos, clip_if_necessary=True)
-        elif (Ppos>1).any() or (Ppos<0).any():
-            if self.post_proc == 'softmax':
-                calib = softmax(np.asarray([1 - Ppos, Ppos]).T, axis=1)
-            else:
-                if (Ppos>1).any() or (Ppos<0).any():
-                    Ppos = self.regressor.predict(Ppos)
-                calib = np.asarray([1-Ppos,Ppos]).T
-        return calib
-
-
-class QuantifyBinsCalibrator_depr(CalibratorSimple): # does not work at all
-    def __init__(self, classifier, quantifier_cls, nbins=8):
-        self.classifier = classifier
-        self.quantifier_cls = quantifier_cls
-        self.bins=np.linspace(0, 1, nbins+1)
-        self.bins[-1]+=1e-5
-
-    def fit(self, P, y):
-        posteriors = P[:,1]
-        self.quantifiers=[]
-        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
-            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
-            if sum(sel)>0 and sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
-                lc = LabelledCollection(P[sel], y[sel], classes=[0,1])
-                q_bin = self.quantifier_cls(clone(self.classifier)).fit(lc)
-                self.quantifiers.append(q_bin)
-            else:
-                self.quantifiers.append(None)
-        return self
-
-    def calibrate(self, P):
-        posteriors = P[:,1]
-        calibrated = np.zeros_like(posteriors, dtype=float)
-        for bin_low, bin_high, quant in zip(self.bins[:-1],self.bins[1:], self.quantifiers):
-            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
-            binsize = sum(sel)
-            if quant is not None and binsize>0:
-                prev = quant.quantify(P[sel])[1]
-            else:
-                prev = 0.5
-            calibrated[sel] = prev
-
-        calibrated = np.asarray([1-calibrated, calibrated]).T
-        return calibrated
-
-
-
-
-class QuantifyCalibrator(CalibratorCompound):
-    def __init__(self, classifier, quantifier_cls, nbins=5):
-        self.classifier = classifier
-        self.quantifier = quantifier_cls()
-        self.bins = np.linspace(0, 1, nbins + 1)
-        self.bins[-1] += 1e-5
-
-    def fit(self, X, y):
-        self.quantifier.fit(LabelledCollection(X,y,classes=[0,1]))
-        return self
-
-    def calibrate_depr(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):  # only returns nbins different values...
-        posteriors = Ztgt[:,1]
-        calibrated = np.zeros_like(posteriors, dtype=float)
-        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
-            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
-            binsize = sum(sel)
-            if binsize>0:
-                prev = self.quantifier.quantify(Ftgt[sel])[1]
-            else:
-                prev = 0.5
-            calibrated[sel] = prev
-
-        calibrated = np.asarray([1-calibrated, calibrated]).T
-        return calibrated
-
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
-        posteriors = Ztgt[:,1]
-        calibration_coord = []
-        calibrated_values = []
-        for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
-            bin_center = (bin_low + bin_high) / 2
-            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
-            binsize = sum(sel)
-            if binsize>0:
-                prev = self.quantifier.quantify(Ftgt[sel])[1]
-            else:
-                prev = bin_center  # <- akin to not modifying the bin prediction
-            calibration_coord.append(bin_center)
-            calibrated_values.append(prev)
-
-        calibrated_posteriors = np.interp(posteriors, xp=calibration_coord, fp=calibrated_values)
-
-        calibrated = np.asarray([1 - calibrated_posteriors, calibrated_posteriors]).T
-        return calibrated
-
 # ----------------------------------------------------------
 # Under Covariate Shift
 # ----------------------------------------------------------
@@ -452,25 +280,207 @@ class HeadToTailCalibrator(CalibratorCompound):
         y_logits = Ztgt / optim_temp
         Pte_recalib = softmax(y_logits, axis=-1)
         return Pte_recalib
+    
+
+# -------------------------------------------------------------
+# Based on Quantification
+# -------------------------------------------------------------
+class HellingerDistanceCalibration(CalibratorSimple):
+
+    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False, postsmooth=False):
+        self.hdy = hdy
+        self.smooth = smooth
+        self.postsmooth=postsmooth
+        self.monotonicity = monotonicity
+
+    def calibrate(self, Z):
+        dm = self.hdy
+        nbins = dm.nbins
+        estim_prev = dm.aggregate(Z)
+        hist_neg, hist_pos = dm.validation_distribution
+        # because the histograms were computed wrt the posterior of the first class (the negative one!), we invert the order
+        # which is equivalent to computing the histogram wrt the positive class
+        hist_neg = hist_neg.flatten()[::-1]
+        hist_pos = hist_pos.flatten()[::-1]
+        hist_neg = hist_neg * estim_prev[0] + EPSILON
+        hist_pos = hist_pos * estim_prev[1] + EPSILON
+        calibration_map = hist_pos / (hist_neg + hist_pos)
+        calibration_map = np.concatenate(([0.], calibration_map, [1.]))
+
+        if self.monotonicity:
+            calibration_map = util.impose_monotonicity(calibration_map)
+        if self.smooth:
+            calibration_map = util.smooth(calibration_map)
+
+        x_coords = np.concatenate(
+            ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
+        uncalibrated_posteriors_pos = Z[:, 1]
+        posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, calibration_map)
+        if self.postsmooth:
+            posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
+        posteriors = np.asarray([1 - posteriors, posteriors]).T
+        return posteriors
+
+
+class EM(CalibratorSimple):
+    def __init__(self, train_prevalence):
+        self.emq = EMQ()
+        self.train_prevalence = train_prevalence
+
+    def calibrate(self, P):
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P)
+        return posteriors
+
+
+class PACCcal(CalibratorSimple):
+    POST_PROCESSING = ['clip', 'softmax', 'logistic', 'isotonic']
+    def __init__(self, P, y, post_proc='clip'):
+        assert post_proc in PACCcal.POST_PROCESSING, 'unknown post_proc method'
+        PteCond = PACC.getPteCondEstim(classes=[0,1], y=y, y_=P)
+        self.tpr = PteCond[1,1]
+        self.fpr = PteCond[1,0]
+        self.post_proc = post_proc
+        if post_proc=='logistic':
+            cal = self._transform(P)
+            self.regressor = _SigmoidCalibration()
+            self.regressor.fit(cal, y)
+        elif post_proc == 'isotonic':
+            cal = self._transform(P)
+            self.regressor = IsotonicRegression(out_of_bounds="clip")
+            self.regressor.fit(cal, y)
+
+    def _transform(self, P):
+        tpr, fpr = self.tpr, self.fpr
+        denom = tpr - fpr
+        if denom > 0:
+            Ppos = P[:, 1]
+            calib = (Ppos - fpr) / (tpr - fpr)
+            return calib
+        else:
+            return P[:,1]
+
+    def calibrate(self, P):
+        Ppos = self._transform(P)
+        if self.post_proc == 'clip':
+            calib = qp.functional.as_binary_prevalence(Ppos, clip_if_necessary=True)
+        elif (Ppos>1).any() or (Ppos<0).any():
+            if self.post_proc == 'softmax':
+                calib = softmax(np.asarray([1 - Ppos, Ppos]).T, axis=1)
+            else:
+                if (Ppos>1).any() or (Ppos<0).any():
+                    Ppos = self.regressor.predict(Ppos)
+                calib = np.asarray([1-Ppos,Ppos]).T
+        return calib
+
+
+class QuantifyCalibrator(CalibratorTarget):
+    def __init__(self, classifier, quantifier_cls, nbins=5, dedicated=False, monotonicity=False, smooth=False, isometric=True):
+        self.classifier = classifier
+        self.quantifier_cls = quantifier_cls
+        self.nbins=nbins
+        self.dedicated = dedicated
+        self.monotonicity = monotonicity
+        self.smooth = smooth
+        self.isometric = isometric
+
+    def fit(self, X, y):
+        posteriors = self.classifier.predict_proba(X)[:,1]
+        
+        if self.isometric:
+            self.bins = util.isometric_binning(self.nbins)
+        else:
+            self.bins = util.isodense_binning(self.nbins, posteriors)
+
+        #print('bins', self.bins)
+
+        self.quantifiers_bin = []
+        if self.dedicated:
+            # learns one dedicated adjustment for each bin
+            for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
+                sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+                #print(f'#sel {sum(sel)} in which #positives {sum(y[sel]==1)} and #negative {sum(y[sel]==0)}')
+                """if sum(sel)>0 and sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
+                    quantifier_bin = self.quantifier_cls(self.classifier)
+                    quantifier_bin.fit(LabelledCollection(X[sel], y[sel], classes=[0,1]), fit_classifier=False)
+                    self.quantifiers_bin.append(quantifier_bin)
+                else:
+                    self.quantifiers_bin.append(None)"""
+                if sum(sel)>0:
+                    if sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
+                        quantifier_bin = self.quantifier_cls(self.classifier)
+                        quantifier_bin.fit(LabelledCollection(X[sel], y[sel], classes=[0,1]), fit_classifier=False)
+                        self.quantifiers_bin.append(quantifier_bin)
+                    else:
+                        self.quantifiers_bin.append(np.mean(y[sel]))
+                else:
+                    self.quantifiers_bin.append(None)
+        else:
+            quantifier = self.quantifier_cls(self.classifier)
+            quantifier.fit(LabelledCollection(X,y,classes=[0,1]), fit_classifier=False)
+            # the same quantifier for all bins
+            for b in range(len(self.bins)-1):
+                self.quantifiers_bin.append(quantifier)
+        return self
+
+    def calibrate(self, Ftgt, Ztgt):
+        posteriors = Ztgt[:,1]
+        calibration_coord = []
+        calibrated_values = []
+        for bin_low, bin_high, quantifier in zip(self.bins[:-1],self.bins[1:], self.quantifiers_bin):
+            sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
+            binsize = sum(sel)
+            if binsize>0:
+                bin_inner = np.mean(posteriors[sel])
+            else:
+                bin_inner = (bin_low + bin_high) / 2
+
+            prev = np.nan 
+            if binsize>0:
+                if isinstance(quantifier, float):
+                    prev = quantifier
+                elif quantifier is not None:
+                    prev = quantifier.quantify(Ftgt[sel])[1]
+                
+            calibration_coord.append(bin_inner)
+            calibrated_values.append(prev)
+
+        calibration_coord = np.asarray([0.] + calibration_coord + [1.])
+        calibrated_values = np.asarray([0.] + calibrated_values + [1.])
+
+        calibrated_values = util.impute_nanvalues_via_interpolation(calibration_coord, calibrated_values)
+
+        if self.monotonicity:
+            calibrated_values = util.impose_monotonicity(calibrated_values)
+        if self.smooth:
+            calibrated_values = util.smooth(calibrated_values)
+
+        calibrated_posteriors = np.interp(posteriors, xp=calibration_coord, fp=calibrated_values)
+
+        calibrated = np.asarray([1 - calibrated_posteriors, calibrated_posteriors]).T
+        return calibrated
+
+
 
 
 # ---------------------------------------------------------------
 # Based on CAP
 # ---------------------------------------------------------------
-class CAPCalibrator(CalibratorCompound):
+class CAPCalibrator(CalibratorTarget):
 
-    def __init__(self, classifier, cap_method, nbins=6):
+    def __init__(self, classifier, cap_method, nbins=6, monotonicity=False, smooth=False):
         assert nbins%2==0, f'unexpected number of bins {nbins}; use an odd number of bins'
         self.classifier = classifier
         self.cap = cap_method
         self.bins = np.linspace(0, 1, nbins + 1)
         self.bins[-1] += 1e-5
+        self.monotonicity = monotonicity
+        self.smooth = smooth
 
     def fit(self, X, y):
         self.cap.fit(X, y)
         return self
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+    def calibrate(self, Ftgt, Ztgt):
         posteriors = Ztgt[:, 1]
         calibration_coord = []
         calibrated_values = []
@@ -482,15 +492,23 @@ class CAPCalibrator(CalibratorCompound):
                 estim_acc = self.cap.predict(Ftgt[sel])
                 estim_positives = estim_acc if bin_center>0.5 else (1.-estim_acc)
             else:
-                estim_positives = 0.5
+                estim_positives = np.nan
             calibration_coord.append(bin_center)
             calibrated_values.append(estim_positives)
 
-        calibration_coord = [0.] + calibration_coord + [1.]
-        calibrated_values = [0.] + calibrated_values + [1.]
+        calibration_coord = np.asarray([0.] + calibration_coord + [1.])
+        calibrated_values = np.asarray([0.] + calibrated_values + [1.])
+
+        calibrated_values = util.impute_nanvalues_via_interpolation(calibration_coord, calibrated_values)
+
+        if self.monotonicity:
+            calibrated_values = util.impose_monotonicity(calibrated_values)
+        if self.smooth:
+            calibrated_values = util.smooth(calibrated_values)
 
         calibrated_posteriors = np.interp(posteriors, xp=calibration_coord, fp=calibrated_values)
 
         calibrated = np.asarray([1 - calibrated_posteriors, calibrated_posteriors]).T
         return calibrated
+
 

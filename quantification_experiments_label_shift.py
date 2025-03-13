@@ -12,13 +12,14 @@ from util import datasets
 import quapy as qp
 from tqdm import tqdm
 import numpy as np
-
 from model.quantifiers import *
 
-REPEATS = 100
-SAMPLE_SIZE=250
-result_dir = f'results/quantification/label_shift/repeats_{REPEATS}_samplesize_{SAMPLE_SIZE}'
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER
+
+
+result_dir = f'results/quantification/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
+
 
 datasets_selected = datasets(top_length_k=10)
 
@@ -124,4 +125,4 @@ table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', valu
 table.name = 'quantification_pps'
 table.reorder_methods(methods_order)
 table.format.configuration.show_std=False
-table.latexPDF('./tables/quantification.pdf')
+table.latexPDF('./tables/quantification_label_shift.pdf')

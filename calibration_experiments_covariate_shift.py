@@ -9,15 +9,16 @@ from sklearn.metrics import brier_score_loss
 from sympy.multipledispatch.dispatcher import source
 import pandas as pd
 from tqdm import tqdm
-
+from quapy.method.aggregative import KDEyML
+from quapy.method.aggregative import PCC
 from model.classifier_calibrators import *
-from util import cal_error
+from model.classifier_accuracy_predictors import ATC, DoC, LEAP
+from util import cal_error, PrecomputedClassifier
 from scipy.special import softmax
+from commons import *
 
 
-REPEATS = 100
-SAMPLESIZE = 250
-result_dir = f'results/calibration/covariate_shift/repeats_{REPEATS}_samplesize={SAMPLESIZE}'
+result_dir = f'results/calibration/covariate_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
 
 
@@ -27,32 +28,12 @@ class ResultRow:
     source: str
     target: str
     id: int
+    shift: float
     method: str
     classifier: str
-    # shift: float
     ece: float
     brier: float
 
-@dataclass
-class Dataset:
-    hidden: np.ndarray
-    logits: np.ndarray
-    posteriors: np.ndarray
-    labels: np.ndarray
-    prevalence: np.ndarray
-
-@dataclass
-class Setup:
-    model: str
-    source: str
-    target: str
-    train: Dataset
-    valid: Dataset
-    test: Dataset
-
-
-sentiment_datasets = ['imdb', 'rt', 'yelp']
-models = ['distilbert-base-uncased', 'bert-base-uncased', 'roberta-base']
 
 
 def calibrators(setup):
@@ -64,44 +45,58 @@ def calibrators(setup):
     # yield 'NaiveTrain', NaiveUncertain(train_prev)
 
     # proper calibration methods
-    yield 'Platt', PlattScaling().fit(Pva, yva)
-    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    #yield 'Platt', PlattScaling().fit(Pva, yva)
+    #yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
 
-    yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    #yield 'EM', EM(train_prevalence=setup.train.prevalence)
     # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
     #yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
     yield 'LasCal', LasCalCalibration(prob2logits=False)
 
-    #for nbins in [8]: #20, 25, 30, 35, 40]:
-    #    dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
-    #    preclassified = LabelledCollection(Pva, yva)
-    #    dm.aggregation_fit(classif_predictions=preclassified, data=val)
+    h = PrecomputedClassifier()
+    val_idx = h.feed(X=setup.valid.hidden, P=setup.valid.posteriors, L=setup.valid.logits)
+
+    for nbins in [8]: #20, 25, 30, 35, 40]:
+        dm = DistributionMatchingY(classifier=h, nbins=nbins)
+        preclassified = LabelledCollection(Pva, yva)
+        dm.aggregation_fit(classif_predictions=preclassified, data=None)
         # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
         # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
-    #    yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
+    
 
-
-    yield 'PACC-cal', PACCcal(Pva, yva)
-    yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
-    #yield 'PACC-cal(soft)2', PACCcal(Pva, yva, post_proc='softmax')
+    ##yield 'PACC-cal', PACCcal(Pva, yva)
+    ##yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
     yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
-    #yield 'PACC-cal(log)2', PACCcal(Pva, yva, post_proc='logistic')
-    yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
-    #yield 'PACC-cal(iso)2', PACCcal(Pva, yva, post_proc='isotonic')
+    yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')  
 
-    # yield 'Bin-PACC', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC).fit(Pva, yva)
-    # yield 'Bin-PACC2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=2).fit(Pva, yva)
-    # yield 'Bin-PACC5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Pva, yva)
-    #yield 'Bin2-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Xva, yva)
-    # yield 'Bin-EM', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ).fit(Pva, yva)
-    # yield 'Bin-EM2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=2).fit(Pva, yva)
-    # yield 'Bin-EM5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Pva, yva)
-    #yield 'Bin2-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
-    #yield 'Bin2-DM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=DistributionMatchingY, nbins=5).fit(Xva, yva)
+    yield 'Bin6-PCC5', QuantifyCalibrator(classifier=h, quantifier_cls=PCC, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva) # smooth and mono
+    yield 'Bin6-PACC5', QuantifyCalibrator(classifier=h, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva) # smooth and mono
+    yield 'Bin6-EM5', QuantifyCalibrator(classifier=h, quantifier_cls=EMQ, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva)
+    yield 'Bin6-KDEy5', QuantifyCalibrator(classifier=h, quantifier_cls=KDEyML, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva)
+
+    yield 'Bin2-ATC6', CAPCalibrator(classifier=h, cap_method=ATC(h), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
+
+    def new_labelshift_protocol(X, y, classes):
+        lc = LabelledCollection(X, y, classes=classes)
+        app = NaturalPrevalenceProtocol(
+            lc,
+            sample_size=SAMPLE_SIZE,
+            repeats=REPEATS,
+            return_type='labelled_collection',
+            random_state=0
+        )
+        return app
+
+
+    yield 'Bin2-DoC6', CAPCalibrator(classifier=h, cap_method=DoC(h, protocol=new_labelshift_protocol(val_idx,yva,[0,1])), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
+    
+    yield 'Bin2-LEAP6', CAPCalibrator(classifier=h, cap_method=LEAP(h, KDEyML(classifier=h)), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
+
 
 
 def get_calibrated_posteriors(calibrator, train, valid, test):
@@ -115,66 +110,21 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
         calib_posteriors = calibrator.calibrate(
             Zsrc=valid.logits, ysrc=valid.labels, Ztgt=test.logits
         )
+    elif isinstance(calibrator, CalibratorTarget):
+        test_X_idx = calibrator.classifier.feed(X=test.hidden, P=test.posteriors, L=test.logits)
+        calib_posteriors = calibrator.calibrate(
+            Ftgt=test_X_idx, Ztgt=test.posteriors
+        )
     elif isinstance(calibrator, CalibratorSimple):
         calib_posteriors = calibrator.calibrate(test.posteriors)
 
     return calib_posteriors
 
 
-def iterate_datasets():
-
-    def load_dataset(path, domain, splitname, reduce=None, random_seed=0):
-        hidden = torch.load(join(path, f'{domain}.{splitname}.hidden_states.pt')).numpy()
-        logits = torch.load(join(path, f'{domain}.{splitname}.logits.pt')).numpy()
-        labels = torch.load(join(path, f'{domain}.{splitname}.labels.pt')).numpy()
-        if reduce is not None and isinstance(reduce,int) and reduce<len(labels):
-            np.random.seed(random_seed)
-            sel_idx = np.random.choice(reduce, size=reduce, replace=False)
-            hidden = hidden[sel_idx]
-            logits = logits[sel_idx]
-            labels = labels[sel_idx]
-        posteriors = softmax(logits, axis=1)
-        prevalence = F.prevalence_from_labels(labels, classes=[0,1])
-        return Dataset(hidden=hidden, logits=logits, posteriors=posteriors, prevalence=prevalence, labels=labels)
-
-    for source in sentiment_datasets:
-        for model in models:
-            path = f'./neural_training/embeds/{source}/{model}'
-
-            train = load_dataset(path, 'source', 'train', reduce=5000)
-            valid = load_dataset(path, 'source', 'validation')
-
-            for target in sentiment_datasets:
-                if target == source:
-                    target_prefix = 'source'
-                else:
-                    target_prefix = f'target_{target}'
-
-                test = load_dataset(path, target_prefix, 'test')
-
-                yield Setup(model=model, source=source, target=target, train=train, valid=valid, test=test)
-
-
-def yield_random_samples(test: Dataset, repeats, samplesize):
-    np.random.seed(0)
-    indexes = []
-    test_length = len(test.labels)
-    for _ in range(repeats):
-        indexes.append(np.random.choice(test_length, size=samplesize, replace=True))
-    for index in indexes:
-        sample_hidden = test.hidden[index]
-        sample_logits = test.logits[index]
-        sample_labels = test.labels[index]
-        sample_posteriors = test.posteriors[index]
-        sample_prevalence = F.prevalence_from_labels(sample_labels, classes=[0,1])
-        yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels, posteriors=sample_posteriors, prevalence=sample_prevalence)
-
-
-total_setups = len(models)*(len(sentiment_datasets)**2)
 all_results = []
 method_order = []
 
-pbar = tqdm(iterate_datasets(), total=total_setups)
+pbar = tqdm(iterate_datasets_covariate_shift(), total=total_setups_covariate_shift)
 for setup in pbar:
     description = f'[{setup.model}]::{setup.source}->{setup.target}'
 
@@ -188,7 +138,7 @@ for setup in pbar:
         else:
             method_setup_results = []
             ece_ave = []
-            for idx, test_sample in enumerate(yield_random_samples(setup.test, repeats=REPEATS, samplesize=SAMPLESIZE)):
+            for idx, (test_sample, shift) in enumerate(yield_random_samples(setup.in_test, setup.out_test, repeats=REPEATS, samplesize=SAMPLE_SIZE)):
                 calib_posteriors = get_calibrated_posteriors(calibrator, setup.train, setup.valid, test_sample)
 
                 ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
@@ -201,6 +151,7 @@ for setup in pbar:
                     source=setup.source,
                     target=setup.target,
                     id=idx,
+                    shift=shift,
                     method=cal_name,
                     classifier=setup.model,
                     ece=ece,
