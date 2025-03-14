@@ -158,9 +158,6 @@ method_order = []
 n_classifiers = len([c for _,c in classifiers()])
 pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
 for dataset, (cls_name, cls) in pbar:
-    # if dataset in ['ctg.1', 'spambase', 'yeast']:
-    #     print('SKIPPING CTG.1, SPAMBASE, YEAST')
-    #     continue
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
@@ -191,8 +188,6 @@ for dataset, (cls_name, cls) in pbar:
                 Pte = cls.predict_proba(Xte)
 
                 Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
-                # print(f'Pte_cal={Pte_cal.shape}')
-                # print(f'yte={yte[:10]}')
                 ece_cal = cal_error(Pte_cal, yte)
                 brier_score = brier_score_loss(y_true=yte, y_proba=Pte_cal[:,1])
 
@@ -206,23 +201,6 @@ for dataset, (cls_name, cls) in pbar:
         all_results.append(report)
 
 df = pd.concat(all_results)
-pivot = df.pivot_table(index=['classifier'], columns='method', values='ece')
-# print(df)
-print('ECE')
-print(pivot)
-# print(pivot.mean(axis=0))
-
-pivot = df.pivot_table(index=['classifier'], columns='method', values='brier')
-# print(df)
-print('Brier Score')
-print(pivot)
-# print(pivot.mean(axis=0))
-
-# df['cal']=df['ece']*df['brier']
-# pivot = df.pivot_table(index=['classifier'], columns='method', values='cal')
-# print(pivot)
-# print(pivot.mean(axis=0))
-
 
 from new_table import LatexTable
 
@@ -243,4 +221,4 @@ for classifier_name, _ in classifiers():
     table_brier.format.configuration.side_columns = True
     tables.append(table_brier)
 
-LatexTable.LatexPDF(f'./tables/calibration.pdf', tables)
+LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)

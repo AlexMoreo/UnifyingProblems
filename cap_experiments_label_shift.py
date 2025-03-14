@@ -1,9 +1,11 @@
 from quapy.method.aggregative import KDEyML, EMQ
 from quapy.protocol import UPP
 from sklearn.linear_model import LogisticRegression
-
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPClassifier
 from model.classifier_accuracy_predictors import *
 from model.classifier_calibrators import CpcsCalibrator, HeadToTailCalibrator
+from itertools import product
 from util import accuracy, cap_error
 import quapy as qp
 from tqdm import tqdm
@@ -27,6 +29,7 @@ class ResultRow:
     dataset: str
     id: int
     method: str
+    classifier: str
     shift: float
     err: float
 
@@ -36,20 +39,19 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(Xva, yva)
     yield 'ATC', ATC(h).fit(Xva, yva)
-    # yield 'ATC-ne', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva) <- wrong implementation? redo in the next line
-    # yield 'ATC-ne2', ATC(h, scoring_fn='neg_entropy').fit(Xva, yva)
     val_prot = UPP(val, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0, return_type='labelled_collection')
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
+    
     # Calibration 2 CAP
     yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    # yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    # yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     # yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    # yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
+    yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
     yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(Xva, yva)
     # yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
 
@@ -57,13 +59,20 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
     yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(Xva, yva)
+    
+
+def classifiers():
+    yield 'lr', LogisticRegression()
+    yield 'nb', GaussianNB()
+    yield 'mlp', MLPClassifier()
 
 
 all_results = []
 methods_order = []
 
-pbar = tqdm(datasets_selected, total=len(datasets_selected))
-for dataset in pbar:
+n_classifiers = len([c for _,c in classifiers()])
+pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
+for dataset, (cls_name, h) in pbar:
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
@@ -72,8 +81,6 @@ for dataset in pbar:
     train, val = train.split_stratified(0.5, random_state=0)
 
     Xtr, ytr = train.Xy
-
-    h = LogisticRegression()
     h.fit(Xtr, ytr)
 
     Xva, yva = val.Xy
@@ -84,12 +91,13 @@ for dataset in pbar:
     for name, cap_method in cap_methods(h, Xva, yva):
         if name not in methods_order:
             methods_order.append(name)
-        result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
+        
+        result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
         else:
             method_dataset_results = []
-            for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}'):
+            for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}-h={cls_name}'):
                 Xte, yte = test_shifted.Xy
 
                 y_pred = h.predict(Xte)
@@ -99,7 +107,7 @@ for dataset in pbar:
                 err_cap = cap_error(acc_true=acc_true, acc_estim=acc_estim)
 
                 shift = qp.error.ae(test_shifted.prevalence(), train_prev)
-                result = ResultRow(dataset=dataset, id=id, method=name, shift=shift, err=err_cap)
+                result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, err=err_cap)
                 method_dataset_results.append(asdict(result))
 
             report = pd.DataFrame(method_dataset_results)
@@ -108,15 +116,22 @@ for dataset in pbar:
         all_results.append(report)
 
 df = pd.concat(all_results)
-pivot = df.pivot_table(index='dataset', columns='method', values='err')
-print(df)
-print(pivot)
-print(pivot.mean(axis=0))
 
+
+"""
 from new_table import LatexTable
 
-table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', value='err')
-table.name = 'cap_pps'
-table.reorder_methods(methods_order)
-table.format.configuration.show_std=False
-table.latexPDF('./tables/cap_label_shift.pdf')
+tables = []
+for classifier_name, _ in classifiers():
+    df_h = df[df['classifier']==classifier_name]
+    print(df_h)
+    table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='err')
+    table.name = f'cap_pps_{classifier_name}'
+    #table.reorder_methods(methods_order)
+    table.format.configuration.show_std=False
+    table.format.configuration.side_columns = True
+    tables.append(table)
+
+
+LatexTable.LatexPDF(f'./tables/cap_label_shift.pdf', tables)
+"""
