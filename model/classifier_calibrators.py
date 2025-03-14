@@ -211,8 +211,8 @@ class TransCalCalibrator(CalibratorCompound):
         self.prob2logits = prob2logits
 
     def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
-        Zsrc = np2tensor(Zsrc, self.prob2logits)
-        Ztgt = np2tensor(Ztgt, self.prob2logits)
+        Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
+        Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
         ysrc = np2tensor(ysrc)
 
         optim_temp_source = Calibrator()._temperature_scale(

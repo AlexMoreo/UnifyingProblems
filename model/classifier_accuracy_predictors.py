@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Callable
-
+import quapy as qp
 from quapy.method.aggregative import AggregativeQuantifier, DistributionMatchingY, PACC, ACC
 from quapy.method.base import BaseQuantifier
 from sklearn.linear_model import LinearRegression
@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 
 from quapy.data.base import LabelledCollection
 from quapy.protocol import AbstractProtocol
+from quapy.method.aggregative import EMQ
 import quapy.functional as F
 from sklearn.base import BaseEstimator
 
@@ -359,6 +360,15 @@ class HDC2CAP(ClassifierAccuracyPrediction):
         return acc_pred
 
 
+def check_posteriors(q, posteriors):
+    # the recalibration in quapy's EMQ is only invoked if the method "quantify" is called;
+    # but not if the method "aggregate" is called. This should be fixed in the new version
+    if qp.__version__ in ['0.1.8', '0.1.9'] and isinstance(q, EMQ) and q.recalib is not None:
+        if q.calibration_function is not None:
+            posteriors = q.calibration_function(posteriors)
+    return posteriors
+
+
 class Quant2CAP(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator, quantifier_class):
@@ -400,10 +410,14 @@ class Quant2CAP(ClassifierAccuracyPrediction):
         posteriors = self.posterior_probabilities(X)
 
         # predicted prevalence of positive instances in predicted positives
-        pos_prev = self.q_pos.aggregate(posteriors[y_hat == 1])[1]
+        pos_posteriors = posteriors[y_hat == 1]
+        pos_posteriors = check_posteriors(self.q_pos, pos_posteriors)
+        pos_prev = self.q_pos.aggregate(pos_posteriors)[1]
 
         # predicted prevalence of negative instances in predicted negatives
-        neg_prev = self.q_neg.aggregate(posteriors[y_hat == 0])[0]
+        neg_posteriors = posteriors[y_hat == 0]
+        neg_posteriors = check_posteriors(self.q_neg, neg_posteriors)
+        neg_prev = self.q_neg.aggregate(neg_posteriors)[0]
 
         n_instances = posteriors.shape[0]
         n_pred_pos = y_hat.sum()

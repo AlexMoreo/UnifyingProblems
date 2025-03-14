@@ -52,9 +52,9 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
 
     # Calibration 2 CAP
     yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
-    ## yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
-    ## yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    #yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
     #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(x_val_idx, yva)
     ## yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     yield 'LasCal-a-S', LasCal2CAP(classifier=h, probs2logits=True).fit(x_val_idx, yva)
@@ -65,7 +65,8 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'PCC-a', Quant2CAP(classifier=h, quantifier_class=PCC).fit(x_val_idx, yva)
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(x_val_idx, yva)
     yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(x_val_idx, yva)
-    yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
+    #yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
+    yield 'EMQ-BCTS-a', Quant2CAP(classifier=h, quantifier_class=EMQ.EMQ_BCTS).fit(x_val_idx, yva)
 
 
 
@@ -125,8 +126,13 @@ print(pivot.mean(axis=0))
 
 from new_table import LatexTable
 
-table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', value='err')
-table.name = 'cap_covshift'
-table.reorder_methods(methods_order)
-table.format.configuration.show_std=False
-table.latexPDF('./tables/cap_covariate_shift.pdf')
+tables = []
+for classifier_name in models:
+    df_h = df[df['classifier']==classifier_name]
+    table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='err')
+    table.name = f'cap_cv_AE_{classifier_name}'
+    table.reorder_methods(methods_order)
+    table.format.configuration.show_std=False
+    table.format.configuration.side_columns = True
+    tables.append(table)
+LatexTable.LatexPDF('./tables/cap_covariate_shift.pdf', tables=tables)

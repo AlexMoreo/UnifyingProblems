@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Callable, Literal
 
 import numpy as np
@@ -11,45 +12,53 @@ from quapy.protocol import AbstractProtocol
 from sklearn.base import BaseEstimator, clone
 
 from lascal import EceLabelShift, get_importance_weights
-from model.classifier_accuracy_predictors import ATC, DoC, LEAP
-from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator
+from model.classifier_accuracy_predictors import ClassifierAccuracyPrediction, ATC, DoC, LEAP
+from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator, CpcsCalibrator
 from util import posterior_probabilities
+from abc import abstractmethod
+
+class Method2Quant(BaseQuantifier):
+    @abstractmethod
+    def fit(self, data, *args, **kwargs):
+        ...
+
+    @abstractmethod
+    def quantify(self, instances, *args, **kwargs):
+        ...
 
 
-class ATC2Quant(BaseQuantifier):
-
-    def __init__(self, classifier: BaseEstimator):
+class CAP2Quant(Method2Quant):
+     
+    def __init__(self, classifier: BaseEstimator, cap_instance: ClassifierAccuracyPrediction):
         self.h = classifier
-        self.cap_pos = ATC(classifier=classifier)
-        self.cap_neg = ATC(classifier=classifier)
-
-    def fit(self, data: LabelledCollection):
+        self.cap_pos = copy(cap_instance)
+        self.cap_neg = copy(cap_instance)
+        
+    def fit(self, data: LabelledCollection, *args, **kwargs):
         X, y = data.Xy
         y_pred = self.h.predict(X)
 
         # h(x)=1
-        Xpos = X[y_pred == 1]
-        ypos = y[y_pred == 1]
-        self.cap_pos.fit(Xpos, ypos)
+        pred_positives = y_pred==1
+        self.cap_pos.fit(X[pred_positives], y[pred_positives])
 
         # h(x)=1
-        Xneg = X[y_pred == 0]
-        yneg = y[y_pred == 0]
-        self.cap_neg.fit(Xneg, yneg)
+        pred_negatives = y_pred==0
+        self.cap_neg.fit(X[pred_negatives], y[pred_negatives])
 
         return self
 
-    def quantify(self, X):
+    def quantify(self, X, *args, **kwargs):
         n = X.shape[0]
         y_pred = self.h.predict(X)
 
-        Xpos = X[y_pred == 1]
-        acc_pos = self.cap_pos.predict(Xpos)
-        n_pos = Xpos.shape[0]
+        pred_positives = y_pred==1
+        acc_pos = self.cap_pos.predict(X[pred_positives])
+        n_pos = sum(pred_positives)
 
-        Xneg = X[y_pred == 0]
-        acc_neg = self.cap_neg.predict(Xneg)
-        n_neg = Xneg.shape[0]
+        pred_negatives = y_pred==0
+        acc_neg = self.cap_neg.predict(X[pred_negatives])
+        n_neg = sum(pred_negatives)
 
         estim_pos_prev = acc_pos*(n_pos/n) + (1-acc_neg)*(n_neg/n)
         estim_prev = F.as_binary_prevalence(estim_pos_prev)
@@ -57,84 +66,53 @@ class ATC2Quant(BaseQuantifier):
         return estim_prev
 
 
-class LEAP2Quant(BaseQuantifier):
+class ATC2Quant(CAP2Quant):
+    def __init__(self, classifier):
+        super().__init__(classifier, ATC(classifier=classifier))
+    
 
-    def __init__(self, classifier: BaseEstimator):
-        self.h = classifier
-        self.cap_pos = LEAP(classifier=classifier, q_class=KDEyML(classifier=clone(classifier)))
-        self.cap_neg = LEAP(classifier=classifier, q_class=KDEyML(classifier=clone(classifier)))
-
-    def fit(self, data: LabelledCollection):
-        X, y = data.Xy
-        y_pred = self.h.predict(X)
-
-        # h(x)=1
-        Xpos = X[y_pred == 1]
-        ypos = y[y_pred == 1]
-        self.cap_pos.fit(Xpos, ypos)
-
-        # h(x)=1
-        Xneg = X[y_pred == 0]
-        yneg = y[y_pred == 0]
-        self.cap_neg.fit(Xneg, yneg)
-
-        return self
-
-    def quantify(self, X):
-        n = X.shape[0]
-        y_pred = self.h.predict(X)
-
-        Xpos = X[y_pred == 1]
-        acc_pos = self.cap_pos.predict(Xpos)
-        n_pos = Xpos.shape[0]
-
-        Xneg = X[y_pred == 0]
-        acc_neg = self.cap_neg.predict(Xneg)
-        n_neg = Xneg.shape[0]
-
-        estim_pos_prev = acc_pos*(n_pos/n) + (1-acc_neg)*(n_neg/n)
-        estim_prev = F.as_binary_prevalence(estim_pos_prev)
-
-        return estim_prev
+class LEAP2Quant(CAP2Quant):
+    def __init__(self, classifier, quantifier_cls=KDEyML):
+        super().__init__(classifier, LEAP(classifier=classifier, q_class=quantifier_cls(classifier=classifier)))
 
 
-class DoC2Quant(BaseQuantifier):
+class DoC2Quant(Method2Quant):
 
     def __init__(self, classifier: BaseEstimator, protocol_constructor: Callable):
         self.h = classifier
         self.protocol_constructor = protocol_constructor
 
-    def fit(self, data: LabelledCollection):
+    def fit(self, data: LabelledCollection, *args, **kwargs):
         X, y = data.Xy
         y_pred = self.h.predict(X)
 
         # h(x)=1
-        Xpos = X[y_pred == 1]
-        ypos = y[y_pred == 1]
+        pred_positives = y_pred==1
+        Xpos = X[pred_positives]
+        ypos = y[pred_positives]
         pos_prot = self.protocol_constructor(Xpos, ypos, classes=self.h.classes_)
-        self.doc_pos = DoC(self.h, protocol=pos_prot)
-        self.doc_pos.fit(Xpos, ypos)
+        self.doc_pos = DoC(self.h, protocol=pos_prot).fit(Xpos, ypos)
 
         # h(x)=1
-        Xneg = X[y_pred == 0]
-        yneg = y[y_pred == 0]
+        pred_negatives = y_pred==0
+        Xneg = X[pred_negatives]
+        yneg = y[pred_negatives]
         neg_prot = self.protocol_constructor(Xneg, yneg, classes=self.h.classes_)
-        self.doc_neg = DoC(self.h, protocol=neg_prot)
-        self.doc_neg.fit(Xneg, yneg)
+        self.doc_neg = DoC(self.h, protocol=neg_prot).fit(Xneg, yneg)
 
         return self
 
-    def quantify(self, X):
+    def quantify(self, X, *args, **kwargs):
         n = X.shape[0]
         y_pred = self.h.predict(X)
 
-        Xpos = X[y_pred == 1]
-        acc_pos = self.doc_pos.predict(Xpos)
-        n_pos = Xpos.shape[0]
+        pred_positives = y_pred==1
+        acc_pos = self.doc_pos.predict(X[pred_positives])
+        n_pos = sum(pred_positives)
 
-        Xneg = X[y_pred == 0]
-        acc_neg = self.doc_neg.predict(Xneg)
-        n_neg = Xneg.shape[0]
+        pred_negatives = y_pred==0
+        acc_neg = self.doc_neg.predict(X[pred_negatives])
+        n_neg = sum(pred_negatives)
 
         estim_pos_prev = acc_pos * (n_pos / n) + (1 - acc_neg) * (n_neg / n)
         estim_prev = F.as_binary_prevalence(estim_pos_prev)
@@ -142,70 +120,67 @@ class DoC2Quant(BaseQuantifier):
         return estim_prev
 
 
-class LasCal2Quant(BaseQuantifier):
+class LasCal2Quant(Method2Quant):
     def __init__(self, classifier, prob2logits=True):
         self.classifier = classifier
         self.lascal = LasCalCalibration(prob2logits)
 
-    def fit(self, data: LabelledCollection):
+    def fit(self, data: LabelledCollection, *args, **kwargs):
         X, y = data.Xy
         P = posterior_probabilities(self.classifier, X)
         self.Ptr = P
         self.ytr = y
         return self
 
-    def quantify(self, X):
+    def quantify(self, X, *args, **kwargs):
         P_uncal = posterior_probabilities(self.classifier, X)
         P_calib = self.lascal.calibrate(self.Ptr, self.ytr, P_uncal)
         prev_estim = np.mean(P_calib, axis=0)
         return prev_estim
 
 
-class Transcal2Quant(BaseQuantifier):
-    def __init__(self, classifier, Xtr, ytr, prob2logits=True):
+class CalibratorCompound2Quant(Method2Quant):
+    def __init__(self, classifier, Ftr, ytr, calibrator_cls, prob2logits=True):
         self.classifier = classifier
-        self.transcal = TransCalCalibrator(prob2logits)
-        self.Xtr = Xtr
+        self.calib = calibrator_cls(prob2logits)
+        self.Ftr = Ftr
         self.ytr = ytr
 
-    def fit(self, data: LabelledCollection):
+    def fit(self, data: LabelledCollection, hidden=None, *args, **kwargs):
         X, y = data.Xy
         P = posterior_probabilities(self.classifier, X)
-        self.Xva = X
-        self.Pva = P
-        self.yva = y
+        
+        Fsrc = X if hidden is None else hidden
+        self.Fsrc = Fsrc
+        self.Psrc = P
+        self.ysrc = y
         return self
 
-    def quantify(self, X):
+    def quantify(self, X, hidden=None, *args, **kwargs):
         P_uncal = posterior_probabilities(self.classifier, X)
-        P_calib = self.transcal.calibrate(
-            self.Xtr, self.ytr, self.Xva, self.Pva, self.yva, X, P_uncal
+        
+        Ftgr = X if hidden is None else hidden
+
+        P_calib = self.calib.calibrate(
+            Ftr=self.Ftr, ytr=self.ytr, Fsrc=self.Fsrc, Zsrc=self.Psrc, ysrc=self.ysrc, Ftgt=Ftgr, Ztgt=P_uncal
         )
         prev_estim = np.mean(P_calib, axis=0)
         return prev_estim
 
-class Head2Tail2Quant(BaseQuantifier):
-    def __init__(self, classifier, Xtr, ytr, prob2logits=True):
-        self.classifier = classifier
-        self.head2tail = HeadToTailCalibrator(prob2logits)
-        self.Xtr = Xtr
-        self.ytr = ytr
 
-    def fit(self, data: LabelledCollection):
-        X, y = data.Xy
-        P = posterior_probabilities(self.classifier, X)
-        self.Xva = X
-        self.Pva = P
-        self.yva = y
-        return self
+class Transcal2Quant(CalibratorCompound2Quant):
+    def __init__(self, classifier, Ftr, ytr, prob2logits=True):
+        super().__init__(classifier, Ftr, ytr, calibrator_cls=TransCalCalibrator, prob2logits=prob2logits)
 
-    def quantify(self, X):
-        P_uncal = posterior_probabilities(self.classifier, X)
-        P_calib = self.head2tail.calibrate(
-            self.Xtr, self.ytr, self.Xva, self.Pva, self.yva, X, P_uncal
-        )
-        prev_estim = np.mean(P_calib, axis=0)
-        return prev_estim
+
+class Cpcs2Quant(CalibratorCompound2Quant):
+    def __init__(self, classifier, Ftr, ytr, prob2logits=True):
+        super().__init__(classifier, Ftr, ytr, calibrator_cls=CpcsCalibrator, prob2logits=prob2logits)
+
+
+class HeadToTail2Quant(CalibratorCompound2Quant):
+    def __init__(self, classifier, Ftr, ytr, prob2logits=True):
+        super().__init__(classifier, Ftr, ytr, calibrator_cls=HeadToTailCalibrator, prob2logits=prob2logits)
 
 
 class PACCLasCal(PACC):

@@ -38,7 +38,7 @@ def new_labelshift_protocol(X, y, classes):
 
 def quantifiers(classifier, Xtr, ytr):
     # quantification methods
-    yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
+    #yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
     yield 'CC', CC(classifier)
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
