@@ -4,6 +4,7 @@ import scipy
 import pandas as pd
 from pandas import DataFrame
 import torch
+from scipy.stats import binom
 from sklearn.base import BaseEstimator
 
 from lascal import Ece
@@ -71,52 +72,69 @@ def accuracy_from_contingency_table(ct):
     return np.diagonal(ct).sum() / ct.sum()
 
 
-def count_successes(df: DataFrame, baselines, value, expected_repetitions=100):
+def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p_val=0.05):
     datasets = df.dataset.unique()
     methods = df.method.unique()
+    classifiers = df.classifier.unique() if 'classifier' in df.columns else [None]
     ids = sorted(df.id.unique())
     n_datasets = len(datasets)
     n_methods = len(methods)
     n_baselines = len(baselines)
+    n_classifiers = len(classifiers)
     n_experiments = len(ids)
-    outcomes = np.zeros(shape=(n_datasets, n_methods, n_experiments))
+    outcomes = np.zeros(shape=(n_datasets, n_methods, n_experiments*n_classifiers))
 
     # collect all results in a tensor, in order of experiment idx
     for i, dataset in enumerate(datasets):
         df_data = df[df['dataset']==dataset]
         for j, method in enumerate(methods):
             df_data_method = df_data[df_data['method']==method]
-            if len(df_data_method)!=expected_repetitions:
-                print(f'unexpected length of dataframe {len(df_data_method)}')
-                continue
-            for id, val in zip(df_data_method.id.values, df_data_method[value].values):
-                outcomes[i,j,id]=val
+            for k, classifier in enumerate(classifiers):
+                if classifier is not None:
+                    df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
+                else:
+                    df_data_method_cls = df_data_method
+                if len(df_data_method_cls)!=expected_repetitions:
+                    print(f'unexpected length of dataframe {len(df_data_method_cls)}')
+                    continue
+                for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
+                    outcomes[i,j,k*n_experiments+id]=val
 
     baselines_idx = {baseline: np.where(methods==baseline)[0][0] for baseline in baselines}
 
     count = {}
+    reject_H0 = {}
     for j, method in enumerate(methods):
         if method in baselines: continue
         # counts how many times the method has improved over 0, 1, 2, ... #baselines baselines
-        method_successes_count = {b:0 for b in range(n_baselines+1)}
+        method_successes_count = {b:0 for b in range(1,n_baselines+1)}
         ave = []
         for i, dataset in enumerate(datasets):
             method_scores = outcomes[i,j]
-            method_dataset_successes = np.zeros(shape=expected_repetitions, dtype=int)
+            method_dataset_successes = np.zeros(shape=expected_repetitions*n_classifiers, dtype=int)
             for baseline in baselines:
                 baseline_scores = outcomes[i,baselines_idx[baseline]]
                 successes = (method_scores <= baseline_scores)*1
                 method_dataset_successes += successes
             ave.append(np.mean(method_dataset_successes))
-            for b in range(n_baselines+1):
+            for b in range(1, n_baselines+1):
                 times_better_than_b_baselines = sum(method_dataset_successes>=b)
                 method_successes_count[b] = method_successes_count[b] + times_better_than_b_baselines
         # report the counts as fractions over the total
-        method_successes_count = {b:v/(n_datasets*expected_repetitions) for b,v in method_successes_count.items()}
+        total_experiments = n_datasets*expected_repetitions*n_classifiers
+        # establish the theoretical probability of success assuming the method and the baselines are not different
+        # i.e., for 3 baselines, P(M>1 method) = 75%, P(M>2 methods) = 50%, P(M>3 methods) = 25%
+        rand_expected_success = {b:1.-b/(n_baselines+1) for b in range(1, n_baselines+1)}
+        method_successes_count = {b:v/total_experiments for b,v in method_successes_count.items()}
+        method_successes_stat  = {b:1-binom.cdf(v*total_experiments-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()}
+
         count[method] = method_successes_count
+        reject_H0[method] = method_successes_stat
+
         ave = np.mean(ave)
         count[method]['ave']=ave
-    return count
+
+    return count, reject_H0
 
 
 def isometric_binning(nbins, xlow=0, xhigh=1, eps=1e-5):

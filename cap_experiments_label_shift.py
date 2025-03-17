@@ -1,3 +1,5 @@
+import pickle
+
 from quapy.method.aggregative import KDEyML, EMQ
 from quapy.protocol import UPP
 from sklearn.linear_model import LogisticRegression
@@ -43,7 +45,7 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
 
-    
+
     # Calibration 2 CAP
     yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
@@ -59,7 +61,7 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
     yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(Xva, yva)
-    
+
 
 def classifiers():
     yield 'lr', LogisticRegression()
@@ -118,7 +120,8 @@ for dataset, (cls_name, h) in pbar:
 df = pd.concat(all_results)
 
 
-"""
+df.to_pickle('./cap_label_shift.pkl', protocol=pickle.HIGHEST_PROTOCOL)
+
 from new_table import LatexTable
 
 tables = []
@@ -127,11 +130,10 @@ for classifier_name, _ in classifiers():
     print(df_h)
     table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='err')
     table.name = f'cap_pps_{classifier_name}'
-    #table.reorder_methods(methods_order)
+    table.reorder_methods(methods_order)
     table.format.configuration.show_std=False
     table.format.configuration.side_columns = True
     tables.append(table)
 
 
 LatexTable.LatexPDF(f'./tables/cap_label_shift.pdf', tables)
-"""

@@ -8,6 +8,8 @@ import pandas as pd
 import os
 from os.path import join
 import pathlib
+
+import util
 from util import datasets
 import quapy as qp
 from tqdm import tqdm
@@ -51,12 +53,17 @@ def quantifiers(classifier, Xtr, ytr):
     yield 'LEAP-q', LEAP2Quant(classifier)
 
     # Calibration methods
-    yield 'LasCal-q', LasCal2Quant(classifier, prob2logits=True)
-    # yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
+    yield 'Cpcs-q-S', Cpcs2Quant(classifier, Xtr, ytr, prob2logits=True)
+    yield 'Cpcs-q-P', Cpcs2Quant(classifier, Xtr, ytr, prob2logits=False)
+
     yield 'TransCal-q', Transcal2Quant(classifier, Xtr, ytr, prob2logits=True)
-    # yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
-    # yield 'Head2Tail-q', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
-    yield 'Head2Tail-q-P', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=False)
+    yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
+
+    yield 'LasCal-q', LasCal2Quant(classifier, prob2logits=True)
+    yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
+
+    yield 'Head2Tail-q', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=True)
+    yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=False)
     # yield 'PACC(LasCal)', PACCLasCal(classifier)
     # yield 'EMQ(LasCal)', EMQLasCal(classifier)
 
@@ -126,3 +133,4 @@ table.name = 'quantification_pps'
 table.reorder_methods(methods_order)
 table.format.configuration.show_std=False
 table.latexPDF('./tables/quantification_label_shift.pdf')
+

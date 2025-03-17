@@ -1,6 +1,7 @@
 import numpy as np
 import quapy as qp
 import torch
+from numpy.ma.core import shape
 from quapy.data import LabelledCollection
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from sklearn.base import BaseEstimator, clone
@@ -134,24 +135,28 @@ class LasCalCalibration(CalibratorSourceTarget):
         ysrc = np2tensor(ysrc)
         yte = None
 
-        source_agg = {
-            'y_logits': Zsrc,
-            'y_true': ysrc
-        }
-        target_agg = {
-            'y_logits': Ztgt,
-            'y_true': yte
-        }
+        try:
+            calibrated_agg = calibrator.calibrate(
+                method_name='lascal',
+                source_agg={
+                    'y_logits': Zsrc,
+                    'y_true': ysrc
+                },
+                target_agg={
+                    'y_logits': Ztgt,
+                    'y_true': yte
+                },
+                train_agg=None,
+            )
+            y_logits = calibrated_agg['target']['y_logits']
+            Pte_calib = y_logits.softmax(-1).numpy()
+        except Exception:
+            Ztgt = Ztgt.numpy()
+            if np.isclose(Ztgt.sum(axis=1), 1).all():
+                Pte_calib = Ztgt
+            else:
+                Pte_calib = softmax(Ztgt, axis=1)
 
-        calibrated_agg = calibrator.calibrate(
-            method_name='lascal',
-            source_agg=source_agg,
-            target_agg=target_agg,
-            train_agg=None,
-        )
-
-        y_logits = calibrated_agg['target']['y_logits']
-        Pte_calib = y_logits.softmax(-1).numpy()
         return Pte_calib
 
 
@@ -222,7 +227,10 @@ class TransCalCalibrator(CalibratorCompound):
         _, source_confidence, error_source_val = cal_acc_error(
             Zsrc / optim_temp_source, ysrc
         )
-        weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
+        try:
+            weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
+        except ValueError:
+            weight = np.ones(shape=(Fsrc.shape[0],1), dtype=float)
         # Find optimal temp with TransCal
         optim_temp = TransCal().find_best_T(
             Ztgt.numpy(),
@@ -247,7 +255,10 @@ class CpcsCalibrator(CalibratorCompound):
         Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
         ysrc = np2tensor(ysrc)
 
-        weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
+        try:
+            weight = get_weight_feature_space(Ftr, Ftgt, Fsrc)
+        except ValueError:
+            weight = np.ones(shape=(Fsrc.shape[0],1), dtype=float)
         # Find optimal temp with TransCal
 
         optim_temp = Cpcs().find_best_T(Zsrc, ysrc, weight)

@@ -9,6 +9,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 
+import util
 from model.classifier_calibrators import *
 from tqdm import tqdm
 import quapy as qp
@@ -58,7 +59,7 @@ def calibration_methods(classifier, Pva, yva, train):
     # yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
 
     # from quantification
-    #yield 'EM', EM(train.prevalence())
+    yield 'EM', EM(train.prevalence())
     # yield 'EM-BCTS', EMBCTSCalibration()
     for nbins in [8]: #20, 25, 30, 35, 40]:
         dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
@@ -222,3 +223,9 @@ for classifier_name, _ in classifiers():
     tables.append(table_brier)
 
 LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)
+
+successes = util.count_successes(df, baselines=['CPCS-S', 'TransCal-S', 'LasCal-S'], value='ece', expected_repetitions=300)
+for method in method_order:
+    print(f'method={method}')
+    for count, val in successes[method]:
+        print(f'\t{count}: {val}')

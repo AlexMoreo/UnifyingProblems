@@ -409,19 +409,25 @@ class Quant2CAP(ClassifierAccuracyPrediction):
         y_hat = self.classify(X)
         posteriors = self.posterior_probabilities(X)
 
-        # predicted prevalence of positive instances in predicted positives
-        pos_posteriors = posteriors[y_hat == 1]
-        pos_posteriors = check_posteriors(self.q_pos, pos_posteriors)
-        pos_prev = self.q_pos.aggregate(pos_posteriors)[1]
-
-        # predicted prevalence of negative instances in predicted negatives
-        neg_posteriors = posteriors[y_hat == 0]
-        neg_posteriors = check_posteriors(self.q_neg, neg_posteriors)
-        neg_prev = self.q_neg.aggregate(neg_posteriors)[0]
-
         n_instances = posteriors.shape[0]
         n_pred_pos = y_hat.sum()
-        n_pred_neg = n_instances-n_pred_pos
+        n_pred_neg = n_instances - n_pred_pos
+
+        # predicted prevalence of positive instances in predicted positives
+        if n_pred_pos>0:
+            pos_posteriors = posteriors[y_hat == 1]
+            pos_posteriors = check_posteriors(self.q_pos, pos_posteriors)
+            pos_prev = self.q_pos.aggregate(pos_posteriors)[1]
+        else:
+            pos_prev = 0
+
+        # predicted prevalence of negative instances in predicted negatives
+        if n_pred_neg>0:
+            neg_posteriors = posteriors[y_hat == 0]
+            neg_posteriors = check_posteriors(self.q_neg, neg_posteriors)
+            neg_prev = self.q_neg.aggregate(neg_posteriors)[0]
+        else:
+            neg_prev = 0
 
         acc_pred = (pos_prev*n_pred_pos + neg_prev*n_pred_neg) / n_instances
 

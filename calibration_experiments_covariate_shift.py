@@ -45,11 +45,11 @@ def calibrators(setup):
     # yield 'NaiveTrain', NaiveUncertain(train_prev)
 
     # proper calibration methods
-    #yield 'Platt', PlattScaling().fit(Pva, yva)
-    #yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    yield 'Platt', PlattScaling().fit(Pva, yva)
+    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
 
-    #yield 'EM', EM(train_prevalence=setup.train.prevalence)
-    # yield 'EM', PACCcal(softmax(valid_logits, axis=1), valid_y)
+    yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    # yield '?', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
     #yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
