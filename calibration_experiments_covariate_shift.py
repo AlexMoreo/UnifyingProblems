@@ -48,11 +48,14 @@ def calibrators(setup):
     yield 'Platt', PlattScaling().fit(Pva, yva)
     yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
 
-    # yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    yield 'EM', EM(train_prevalence=setup.train.prevalence)
     yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
     # yield '?', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
-    # yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
+    yield 'Head2Tail', HeadToTailCalibrator(prob2logits=True).fit(
+        Ftr=setup.train.hidden, ytr=setup.train.labels,
+        Fsrc=setup.valid.hidden, Zsrc=setup.valid.posteriors, ysrc=setup.valid.labels
+    )
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
     yield 'LasCal', LasCalCalibration(prob2logits=False)
 

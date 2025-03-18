@@ -299,15 +299,14 @@ class CpcsCalibrator(CalibratorCompound):
 
 
 # HeadToTail [Chen and Su, 2023]
-class HeadToTailCalibrator(CalibratorCompound):
+class HeadToTailCalibrator(CalibratorSimple):
 
     def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
 
-    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+    def fit(self, Ftr, ytr, Fsrc, Zsrc, ysrc):
         if self.prob2logits:
             Zsrc = np_prob2logit(Zsrc)
-            Ztgt = np_prob2logit(Ztgt)
 
         head_to_tail = HeadToTail(
             num_classes=2,
@@ -317,9 +316,14 @@ class HeadToTailCalibrator(CalibratorCompound):
             train_features=Ftr,
             train_labels=ytr,
         )
-        optim_temp = head_to_tail.find_best_T(Zsrc, ysrc)
+        self.optim_temp = head_to_tail.find_best_T(Zsrc, ysrc)
+        return self
 
-        y_logits = Ztgt / optim_temp
+    def calibrate(self, Ztgt):
+        if self.prob2logits:
+            Ztgt = np_prob2logit(Ztgt)
+
+        y_logits = Ztgt / self.optim_temp
         Pte_recalib = softmax(y_logits, axis=-1)
         return Pte_recalib
     
