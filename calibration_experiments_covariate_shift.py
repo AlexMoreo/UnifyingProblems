@@ -48,10 +48,11 @@ def calibrators(setup):
     yield 'Platt', PlattScaling().fit(Pva, yva)
     yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
 
-    yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    # yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
     # yield '?', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
-    #yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
+    # yield 'Head2Tail', HeadToTailCalibrator(prob2logits=False)
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
     yield 'LasCal', LasCalCalibration(prob2logits=False)
 
@@ -100,22 +101,22 @@ def calibrators(setup):
 
 
 def get_calibrated_posteriors(calibrator, train, valid, test):
-    if isinstance(calibrator, CalibratorCompound):
+    if isinstance(calibrator, CalibratorCompound): # working with logits
         calib_posteriors = calibrator.calibrate(
             Ftr=train.hidden, ytr=train.labels,
             Fsrc=valid.hidden, Zsrc=valid.logits, ysrc=valid.labels,
             Ftgt=test.hidden, Ztgt=test.logits
         )
-    elif isinstance(calibrator, CalibratorSourceTarget):
+    elif isinstance(calibrator, CalibratorSourceTarget): # working with logits
         calib_posteriors = calibrator.calibrate(
             Zsrc=valid.logits, ysrc=valid.labels, Ztgt=test.logits
         )
-    elif isinstance(calibrator, CalibratorTarget):
+    elif isinstance(calibrator, CalibratorTarget): # working with posteriors
         test_X_idx = calibrator.classifier.feed(X=test.hidden, P=test.posteriors, L=test.logits)
         calib_posteriors = calibrator.calibrate(
             Ftgt=test_X_idx, Ztgt=test.posteriors
         )
-    elif isinstance(calibrator, CalibratorSimple):
+    elif isinstance(calibrator, CalibratorSimple): # working with posteriors
         calib_posteriors = calibrator.calibrate(test.posteriors)
 
     return calib_posteriors

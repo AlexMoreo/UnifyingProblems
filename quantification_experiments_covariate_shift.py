@@ -47,7 +47,6 @@ def new_natural_protocol(X, y, classes):
 
 class EMQ_BCTS(EMQ):
     def __init__(self, classifier = None):
-        self.backup_em_uncalib = EMQ(classifier)
         super().__init__(classifier, val_split=None, exact_train_prev=False, recalib='bcts', n_jobs=None)
 
     def fit(self, data, fit_classifier=True, val_split=None):
@@ -60,12 +59,6 @@ class EMQ_BCTS(EMQ):
             self.recalib=None
             return self.fit(data, fit_classifier, val_split)
 
-    def quantify(self, instances):
-        try:
-            return super().quantify(instances)
-        except AssertionError:
-            print('Abstention raised an error. Backing up to EMQ without recalibration')
-            return self.backup_em_uncalib.quantify(instances)
 
 
 def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):

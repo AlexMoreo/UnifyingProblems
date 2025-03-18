@@ -1,6 +1,7 @@
 import numpy as np
 import quapy as qp
 import torch
+from abstention.calibration import TempScaling
 from numpy.ma.core import shape
 from quapy.data import LabelledCollection
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
@@ -16,6 +17,8 @@ from quapy.method.aggregative import DistributionMatchingY, EMQ, ACC, PACC
 from scipy.special import softmax
 from abc import ABC, abstractmethod
 from sklearn.calibration import _fit_calibrator
+
+
 
 EPSILON = 1e-7
 
@@ -160,7 +163,7 @@ class LasCalCalibration(CalibratorSourceTarget):
         return Pte_calib
 
 
-class EMBCTSCalibration(CalibratorSourceTarget):
+class EMBCTSCalibration_depr(CalibratorSourceTarget):
 
     def __init__(self, prob2logits=True):
         self.prob2logits = prob2logits
@@ -205,6 +208,34 @@ class EMBCTSCalibration(CalibratorSourceTarget):
             # print(Zsrc.shape)
             # print(Pte.shape)
             return Pte
+
+
+class EMQ_BCTS_Calibrator(CalibratorSimple):
+
+    def __init__(self):
+        pass
+
+    def fit(self, Pva, yva):
+        try:
+            self.calibration_function = TempScaling(bias_positions='all')(
+                Pva, np.eye(2)[yva], posterior_supplied=True
+            )
+            self.train_prevalence = F.prevalence_from_probabilities(
+                self.calibration_function(Pva)
+            )
+        except Exception:
+            print('abstension raised an error; backing up to EMQ')
+            self.calibration_function = lambda P:P
+            self.train_prevalence = F.prevalence_from_labels(yva, classes=[0,1])
+        return self
+
+    def calibrate(self, P):
+        if not np.isclose(P.sum(axis=1), 1).all():
+            raise ValueError('P does not seem to be an array of posterior probabilities')
+        P = self.calibration_function(P)
+        priors, calib_posteriors = EMQ.EM(self.train_prevalence, P)
+        return calib_posteriors
+
 
 # ----------------------------------------------------------
 # Under Covariate Shift
