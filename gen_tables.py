@@ -47,21 +47,28 @@ for method in contenders:
         print(f'\t>{i}: {counts[method][i]*100:.2f}% : significance {reject_H0[method][i]}')
 
 
+
+error = 'ece'
+
+tables = {}
+for i, classifier in enumerate(classifiers):
+    df_block = df[df['classifier']==classifier]
+    table = LatexTable.from_dataframe(df_block, method='method', benchmark='dataset', value=error)
+    table.reorder_methods(all_methods)
+    table.reorder_benchmarks(setups)
+    tables[classifier] = table
+
+
 n_setups = len(setups)
 n_classifiers = len(classifiers)
 n_methods = len(all_methods)
 n_rows = 2 + n_setups*n_classifiers
 n_cols = 2 + n_methods
 str_table = np.full(shape=(n_rows, n_cols), dtype=object, fill_value='')
-add_header = True
+str_table[1,2:] = tables[classifiers[0]].methods
+
 for i, classifier in enumerate(classifiers):
-    df_cls = df[df['classifier']==classifier]
-    table_cls = LatexTable.from_dataframe(df_cls, method='method', benchmark='dataset', value='ece')
-    table_cls.reorder_methods(all_methods)
-    table_cls.reorder_benchmarks(setups)
-    table_arr = table_cls.as_str_array()
-    if add_header:
-        str_table[1,2:] = table_arr[0,1:]
+    table_arr = tables[classifier].as_str_array()
     str_table[2+i*n_setups:2+(i+1)*n_setups, 1:] = table_arr[1:, :]
 
 print(str_table)

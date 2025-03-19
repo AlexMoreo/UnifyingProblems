@@ -41,7 +41,7 @@ class ResultRow:
     brier: float
 
 
-def calibration_methods(classifier, Pva, yva, train):
+def calibration_methods(classifier):
     yield 'Uncal', UncalibratedWrap()
     # yield 'NaiveUncertain', NaiveUncertain()
     # yield 'NaiveTrain', NaiveUncertain(train_prev)
@@ -51,7 +51,10 @@ def calibration_methods(classifier, Pva, yva, train):
     yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
     # yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
-    yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True)
+    yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True).fit(
+        Ftr=Xtr, ytr=ytr,
+        Fsrc=Xva, Zsrc=Pva, ysrc=yva
+    )
     # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False)
     yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
     # yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
@@ -175,7 +178,7 @@ for dataset, (cls_name, cls) in pbar:
     # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
     app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, return_type='labelled_collection')
 
-    for name, calibrator in calibration_methods(cls, Pva, yva, train):
+    for name, calibrator in calibration_methods(cls):
         if name not in method_order:
             method_order.append(name)
 
@@ -224,8 +227,3 @@ for classifier_name, _ in classifiers():
 
 LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)
 
-successes = util.count_successes(df, baselines=['CPCS-S', 'TransCal-S', 'LasCal-S'], value='ece', expected_repetitions=300)
-for method in method_order:
-    print(f'method={method}')
-    for count, val in successes[method]:
-        print(f'\t{count}: {val}')
