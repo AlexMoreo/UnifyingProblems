@@ -1,3 +1,5 @@
+import os
+
 import quapy as qp
 import numpy as np
 import scipy
@@ -8,6 +10,7 @@ from scipy.stats import binom
 from sklearn.base import BaseEstimator
 
 from lascal import Ece
+from pathlib import Path
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
@@ -221,6 +224,13 @@ class PrecomputedClassifier(BaseEstimator):
     def classes_(self):
         return np.asarray([0,1])
     
+
+def save_text(path, text):
+    parent = Path(path).parent
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, 'wt') as foo:
+        foo.write(text)
 
 
 
