@@ -12,28 +12,54 @@ from result_table.src.new_table import LatexTable, Configuration
 from tools import tabular2pdf
 from os.path import join
 
-task = 'calibration'
-dataset_shift='covariate_shift'
+task = 'classifier_accuracy_prediction'
+dataset_shift='label_shift'
+error = {
+    'calibration': 'ece',
+    'classifier_accuracy_prediction': 'err',
+    'quantification': 'ae'
+}[task]
+
 # dataset_shift = 'label_shift'
 folder = commons.EXPERIMENT_FOLDER
 results_path = join('./results', task, dataset_shift, folder)
 
-baselines = ['Uncal', 'Platt', 'Isotonic']
-reference = ['TransCal-S', 'CPCS-S', 'LasCal-S']
-contenders = ['EM', 'HDcal8-sm-mono', 'PACC-cal(log)', 'PACC-cal(iso)', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6']
-#['HDcal8-sm-mono', 'PACC-cal(log)', 'PACC-cal(iso)', 'Bin2-DoC6']
+baselines = {
+    'calibration': ['Uncal', 'Platt', 'Isotonic'],
+    'classifier_accuracy_prediction': ['Naive'],
+    'quantification': ['CC', 'PCC']
+}[task]
+
+reference = {
+    'calibration': ['TransCal', 'CPCS', 'LasCal'],
+    'classifier_accuracy_prediction': ['ATC', 'DoC', 'LEAP'],
+    'quantification': ['PACC', 'EMQ', 'KDEy']
+}[task]
+
+# patch...
+if task=='calibration' and dataset_shift=='label_shift':
+    reference = [f'{M}-S' for M in reference]
+
+contenders = {
+    'calibration': ['EM', 'HDcal8-sm-mono', 'PACC-cal(clip)', 'PACC-cal(log)', 'PACC-cal(iso)', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6'],
+    'classifier_accuracy_prediction': ['TransCal-a-S', 'Cpcs-a-S', 'LasCal-a-P', 'PACC-a', 'KDEy-a', 'EMQ-a'] + (['PCC-a', 'EMQ-BCTS-a'] if dataset_shift=='covariate_shift' else []),
+    'quantification': ['ATC-q', 'DoC-q', 'LEAP-q', 'LasCal-q-P', 'TransCal-q-P', 'Cpcs-q-P']
+}[task]
 
 classifiers = {
     'covariate_shift': ['bert-base-uncased', 'distilbert-base-uncased', 'roberta-base'],
-    'label_shift': ['lr', 'nb', 'mlp']
+    'label_shift': ['lr', 'nb', 'mlp'] if task!='quantification' else ['']
 }[dataset_shift]
 
-datasets = ['imdb', 'rt', 'yelp']
-setups = []
-for source in datasets:
-    for target in datasets:
-        if source==target: continue
-        setups.append(f'{source}->{target}')
+if dataset_shift=='covariate_shift':
+    domains = ['imdb', 'rt', 'yelp']
+    datasets = []
+    for source in domains:
+        for target in domains:
+            if source==target: continue
+            datasets.append(f'{source}->{target}')
+else:
+    datasets = commons.uci_datasets()
 
 all_methods = baselines + reference + contenders
 
@@ -48,29 +74,30 @@ for result_file in glob(join(results_path, '*.csv')):
 df = pd.concat(all_dfs)
 print(f'read {len(df)} rows')
 
-counts, reject_H0 = util.count_successes(df, baselines=baselines, value='ece', expected_repetitions=100)
+counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
 for method in contenders:
     print(method)
     for i in range(1,len(reference)+1):
         print(f'\t>{i}: {counts[method][i]*100:.2f}% : significance {reject_H0[method][i]}')
 
-
-
-error = 'ece'
-
 tables = {}
 for i, classifier in enumerate(classifiers):
-    df_block = df[df['classifier']==classifier]
+    if classifier=='':
+        df_block = df
+    else:
+        df_block = df[df['classifier']==classifier]
     table = LatexTable.from_dataframe(df_block, method='method', benchmark='dataset', value=error)
     table.reorder_methods(all_methods)
-    table.reorder_benchmarks(setups)
+    table.reorder_benchmarks(datasets)
     tables[classifier] = table
 
 
-n_setups = len(setups)
+n_setups = len(datasets)
 n_classifiers = len(classifiers)
 n_methods = len(all_methods)
+n_baselines = len(baselines)
 n_reference = len(reference)
+n_contenders = len(contenders)
 n_rows = 2 + n_setups*n_classifiers
 n_cols = 2 + n_methods
 
@@ -94,14 +121,20 @@ def prepare_strings(table_arr):
 replace_classifier={
     'bert-base-uncased': 'BERT',
     'distilbert-base-uncased': 'DistilBERT',
-    'roberta-base': 'RoBERTa'
+    'roberta-base': 'RoBERTa',
+    'lr': 'Logistic Regression',
+    'nb': 'Naïve Bayes',
+    'mlp': 'Multi-layer Perceptron'
 }
 replace_method={
     'HDcal8-sm-mono': 'DM-cal',
 }
 
+# column_format = style['column_format']
+column_format = 'cc|'+'c'*n_baselines+'|'+'c'*n_reference+'|'+'c'*n_contenders
 lines = []
-lines.append('\\begin{tabular}{' + style['column_format'] + '} '+style['TOPLINE'])
+lines.append('\\begin{tabular}{' + column_format + '} '+style['TOPLINE'])
+lines.append('\multicolumn{2}{c}{} & \multicolumn{'+str(n_baselines)+'}{c|}{Baselines} & \multicolumn{'+str(n_reference)+'}{c|}{Reference} & \multicolumn{'+str(n_contenders)+'}{c}{Contenders}' + style['ENDL'])
 for i, classifier in enumerate(classifiers):
     table_arr = tables[classifier].as_str_array()
     prepare_strings(table_arr)
@@ -111,7 +144,7 @@ for i, classifier in enumerate(classifiers):
         if config.side_columns:
             for j in range(1, table_arr.shape[1]):
                 table_arr[0, j] = '\\begin{sideways}' + table_arr[0, j] + '\;\end{sideways}'
-        header = '\multicolumn{2}{c|}{} & ' + ' & '.join(table_arr[0,1:]) + style['ENDL'] + style['MIDLINE']
+        header = '\multicolumn{2}{c}{} & ' + ' & '.join(table_arr[0,1:]) + style['ENDL'] + style['MIDLINE']
         lines.append(header)
     for j, row in enumerate(table_arr[1:]):
         endl = style['HLINE']

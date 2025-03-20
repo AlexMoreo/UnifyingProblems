@@ -14,17 +14,15 @@ from tqdm import tqdm
 import numpy as np
 import os
 from os.path import join
-from util import datasets
 from dataclasses import dataclass, asdict
 import pandas as pd
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER
-
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
 
 result_dir = f'results/classifier_accuracy_prediction/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
 
 
-datasets_selected = datasets(top_length_k=10)
+datasets_selected = uci_datasets(top_length_k=10)
 
 @dataclass
 class ResultRow:

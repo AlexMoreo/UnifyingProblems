@@ -17,18 +17,17 @@ from quapy.data import LabelledCollection
 from quapy.method.aggregative import DistributionMatchingY, KDEyML
 from quapy.protocol import UPP, ArtificialPrevalenceProtocol
 from dataclasses import dataclass, asdict
-from util import cal_error, datasets
+from util import cal_error
 import os
 from os.path import join
 from sklearn.metrics import brier_score_loss
 from model.classifier_accuracy_predictors import ATC, DoC, LEAP
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER
-
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
 
 result_dir = f'results/calibration/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
 
-datasets_selected = datasets(top_length_k=10)
+datasets_selected = uci_datasets(top_length_k=10)
 
 @dataclass
 class ResultRow:

@@ -10,20 +10,18 @@ from os.path import join
 import pathlib
 
 import util
-from util import datasets
 import quapy as qp
 from tqdm import tqdm
 import numpy as np
 from model.quantifiers import *
 
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER
-
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
 
 result_dir = f'results/quantification/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
 
 
-datasets_selected = datasets(top_length_k=10)
+datasets_selected = uci_datasets(top_length_k=10)
 
 
 def new_labelshift_protocol(X, y, classes):

@@ -74,7 +74,8 @@ def calibrators(setup):
     
 
     ##yield 'PACC-cal', PACCcal(Pva, yva)
-    ##yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'PACC-cal(clip)', PACCcal(Pva, yva, post_proc='clip')
+    yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
     yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
     yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')  
 

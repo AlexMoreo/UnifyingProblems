@@ -1,6 +1,5 @@
 import os
 
-import quapy as qp
 import numpy as np
 import scipy
 import pandas as pd
@@ -14,14 +13,6 @@ from pathlib import Path
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
-
-
-def datasets(top_length_k=10):
-    datasets_selected, _ = list(zip(*sorted([
-        (dataset, len(qp.datasets.fetch_UCIBinaryLabelledCollection(dataset)))
-        for dataset in qp.datasets.UCI_BINARY_DATASETS
-    ], key=lambda x:x[1])[-top_length_k:]))
-    return datasets_selected
 
 
 def posterior_probabilities(h, X):
@@ -98,8 +89,8 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
                 else:
                     df_data_method_cls = df_data_method
                 if len(df_data_method_cls)!=expected_repetitions:
-                    print(f'unexpected length of dataframe {len(df_data_method_cls)}')
-                    continue
+                    # print(f'unexpected length of dataframe {len(df_data_method_cls)}')
+                    raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
                 for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
                     outcomes[i,j,k*n_experiments+id]=val
 
@@ -128,10 +119,10 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
         # establish the theoretical probability of success assuming the method and the baselines are not different
         # i.e., for 3 baselines, P(M>1 method) = 75%, P(M>2 methods) = 50%, P(M>3 methods) = 25%
         rand_expected_success = {b:1.-b/(n_baselines+1) for b in range(1, n_baselines+1)}
-        method_successes_count = {b:v/total_experiments for b,v in method_successes_count.items()}
-        method_successes_stat  = {b:1-binom.cdf(v*total_experiments-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()}
+        method_successes_stat  = {b:1-binom.cdf(v-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()}
+        method_successes_prop = {b:v/total_experiments for b,v in method_successes_count.items()}
 
-        count[method] = method_successes_count
+        count[method] = method_successes_prop
         reject_H0[method] = method_successes_stat
 
         ave = np.mean(ave)

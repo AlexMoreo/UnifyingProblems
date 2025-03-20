@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
+import quapy as qp
 import torch
 from os.path import join
 from scipy.special import softmax
@@ -133,3 +134,11 @@ def yield_random_samples(in_test: Dataset, out_test: Dataset, repeats, samplesiz
         sample_prevalence = F.prevalence_from_labels(sample_labels, classes=[0,1])
         shift = len(index_out)/samplesize
         yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels, posteriors=sample_posteriors, prevalence=sample_prevalence), shift
+
+
+def uci_datasets(top_length_k=10):
+    datasets_selected, _ = list(zip(*sorted([
+        (dataset, len(qp.datasets.fetch_UCIBinaryLabelledCollection(dataset)))
+        for dataset in qp.datasets.UCI_BINARY_DATASETS
+    ], key=lambda x:x[1])[-top_length_k:]))
+    return datasets_selected
