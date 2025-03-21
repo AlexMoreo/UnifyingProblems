@@ -78,7 +78,7 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
     n_experiments = len(ids)
     outcomes = np.zeros(shape=(n_datasets, n_methods, n_experiments*n_classifiers))
 
-    # collect all results in a tensor, in order of experiment idx
+    # collect all results in a tensor of shape (n_datasets, n_methods, total_experiments), in order of experiment idx
     for i, dataset in enumerate(datasets):
         df_data = df[df['dataset']==dataset]
         for j, method in enumerate(methods):
@@ -129,6 +129,53 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
         count[method]['ave']=ave
 
     return count, reject_H0
+
+
+def empirical_baseline(df, baselines, value, n_permutations=1000, expected_repetitions=100):
+    """
+    Get empirical expected success rates under the null hypothesis via permutations
+    """
+    datasets = df.dataset.unique()
+    methods = df.method.unique()
+    classifiers = df.classifier.unique() if 'classifier' in df.columns else [None]
+    n_baselines = len(baselines)
+    n_experiments = expected_repetitions * len(classifiers)
+
+    outcomes = np.zeros((len(datasets), len(methods), n_experiments))
+
+    for i, dataset in enumerate(datasets):
+        df_data = df[df['dataset'] == dataset]
+        for j, method in enumerate(methods):
+            df_data_method = df_data[df_data['method'] == method]
+            for k, classifier in enumerate(classifiers):
+                if classifier is not None:
+                    df_data_method_cls = df_data_method[df_data_method['classifier'] == classifier]
+                else:
+                    df_data_method_cls = df_data_method
+                outcomes[i, j, k*n_experiments:(k+1)*n_experiments] = df_data_method_cls[value].values
+
+    success_rates = {b: [] for b in range(1, n_baselines + 1)}
+
+    for _ in range(n_permutations):
+        permuted_outcomes = outcomes.copy()
+        for i in range(len(datasets)):
+            np.random.shuffle(permuted_outcomes[i])
+
+        for j, method in enumerate(methods):
+            if method in baselines:
+                continue
+            method_successes = np.zeros(n_experiments, dtype=int)
+            for baseline in baselines:
+                baseline_idx = np.where(methods == baseline)[0][0]
+                successes = (permuted_outcomes[:, j, :] <= permuted_outcomes[:, baseline_idx, :]) * 1
+                method_successes += successes
+
+            for b in range(1, n_baselines + 1):
+                success_rates[b].append(np.mean(method_successes >= b))
+
+    empirical_expectation = {b: np.mean(success_rates[b]) for b in success_rates}
+
+    return empirical_expectation
 
 
 def isometric_binning(nbins, xlow=0, xhigh=1, eps=1e-5):
