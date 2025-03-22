@@ -65,6 +65,50 @@ def accuracy(y_true, y_pred):
 def accuracy_from_contingency_table(ct):
     return np.diagonal(ct).sum() / ct.sum()
 
+def get_ranks(df: DataFrame, value, expected_repetitions=100):
+    from scipy.stats import rankdata
+
+    datasets = df.dataset.unique()
+    methods = df.method.unique()
+    classifiers = df.classifier.unique() if 'classifier' in df.columns else [None]
+    ids = sorted(df.id.unique())
+    n_datasets = len(datasets)
+    n_methods = len(methods)
+    n_classifiers = len(classifiers)
+    n_experiments = expected_repetitions * n_classifiers * n_datasets
+    outcomes = np.zeros(shape=(n_methods, n_experiments))
+    by_dataset = []
+
+    # collect all results in a tensor of shape (n_datasets, n_methods, total_experiments), in order of experiment idx
+    for j, method in enumerate(methods):
+        df_method = df[df['method']==method]
+        method_results = []
+        for i, dataset in enumerate(datasets):
+            df_data_method = df_method[df_method['dataset']==dataset]
+            method_dataset_results = []
+            for k, classifier in enumerate(classifiers):
+                if classifier is not None:
+                    df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
+                else:
+                    df_data_method_cls = df_data_method
+                if len(df_data_method_cls)!=expected_repetitions:
+                    raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
+                for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
+                    method_dataset_results.append(val)
+            by_dataset.append({
+                'method': method,
+                'dataset': dataset,
+                'score': np.mean(method_dataset_results)
+            })
+            method_results.extend(method_dataset_results)
+        outcomes[j]=np.asarray(method_results)
+
+    ranks = rankdata(outcomes, axis=0)
+    ave_ranks = ranks.mean(axis=1)
+    method_ranks = {method:ave_ranks[i] for i, method in enumerate(methods)}
+    df = pd.DataFrame(by_dataset)
+    return method_ranks, df
+
 
 def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p_val=0.05):
     datasets = df.dataset.unique()
