@@ -95,11 +95,16 @@ def get_ranks(df: DataFrame, value, expected_repetitions=100):
                     raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
                 for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
                     method_dataset_results.append(val)
-            by_dataset.append({
-                'method': method,
-                'dataset': dataset,
-                'score': np.mean(method_dataset_results)
-            })
+                    by_dataset.append({
+                        'method': method,
+                        'dataset': dataset+str(id),
+                        'score': 1-val
+                    })
+            # by_dataset.append({
+            #     'method': method,
+            #     'dataset': dataset,
+            #     'score': np.mean(method_dataset_results)
+            # })
             method_results.extend(method_dataset_results)
         outcomes[j]=np.asarray(method_results)
 
@@ -311,6 +316,7 @@ def save_text(path, text):
     parent = Path(path).parent
     if parent:
         os.makedirs(parent, exist_ok=True)
+    print(path)
     with open(path, 'wt') as foo:
         foo.write(text)
 

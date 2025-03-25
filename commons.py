@@ -71,7 +71,9 @@ def iterate_datasets__depr():
                 yield Setup(model=model, source=source, target=target, train=train, valid=valid, test=test)
 
 
-def iterate_datasets_covariate_shift():
+def iterate_datasets_covariate_shift(neural_models_path=None):
+    if neural_models_path is None:
+        neural_models_path = NEURAL_PRETRAINED
 
     def load_dataset(path, domain, splitname, reduce=None, random_seed=0):
         hidden = torch.load(join(path, f'{domain}.{splitname}.hidden_states.pt')).numpy()
@@ -89,7 +91,7 @@ def iterate_datasets_covariate_shift():
 
     for source in sentiment_datasets:
         for model in models:
-            path = f'{NEURAL_PRETRAINED}/{source}/{model}'
+            path = f'{neural_models_path}/{source}/{model}'
 
             train = load_dataset(path, 'source', 'train', reduce=5000)
             valid = load_dataset(path, 'source', 'validation')

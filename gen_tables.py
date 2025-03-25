@@ -35,9 +35,8 @@ def tikz2pdf(tikz_path, pdf_path, landscape=False):
     tex_document(doc_path, [tickz_str], landscape=landscape, add_package=['tikz', 'pgfplots'])
     latex2pdf(pdf_path)
 
+
 for task, dataset_shift in itertools.product(tasks, dataset_shifts):
-
-
 
     error = {
         'calibration': 'ece',
@@ -50,7 +49,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
     results_path = join('./results', task, dataset_shift, folder)
 
     baselines = {
-        'calibration': ['Uncal', 'Platt', 'Isotonic'],
+        'calibration': ['Platt'],#['Uncal', 'Platt', 'Isotonic'],
         'classifier_accuracy_prediction': ['Naive'],
         'quantification': ['CC', 'PCC']
     }[task]
@@ -66,7 +65,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         reference = [f'{M}-S' for M in reference]
 
     contenders = {
-        'calibration': ['EM', 'HDcal8-sm-mono', 'PACC-cal(clip)', 'PACC-cal(log)', 'PACC-cal(iso)', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6'],
+        'calibration': ['EM', 'HDcal8-sm-mono', 'PACC-cal(clip)', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6'],
         'classifier_accuracy_prediction': ['TransCal-a-S', 'Cpcs-a-S', 'LasCal-a-P', 'PACC-a', 'KDEy-a', 'EMQ-a'] + (['PCC-a', 'EMQ-BCTS-a'] if dataset_shift=='covariate_shift' else []),
         'quantification': ['ATC-q', 'DoC-q', 'LEAP-q', 'LasCal-q-P', 'TransCal-q-P', 'Cpcs-q-P']
     }[task]
@@ -102,6 +101,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
     counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
     ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
 
+    # get_critical_difference_diagram(cd_df, )
     cd_df = cd_df.pivot_table(
         index="dataset",
         columns="method",
@@ -114,18 +114,19 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         maximize_outcome=True
     )
     # inspect average ranks and groups of statistically indistinguishable treatments
-    diagram.average_ranks  # the average rank of each treatment
-    diagram.get_groups(alpha=.05, adjustment="holm")
+    # diagram.average_ranks  # the average rank of each treatment
+    # diagram.get_groups(alpha=.01, adjustment="holm")
 
     # export the diagram to a file
     diagram.to_file(
-        f'cddiagrams/{task}-{dataset_shift}.tex',
+        f'cddiagrams/diagrams/{task}-{dataset_shift}.tex',
         alpha=.05,
         adjustment="holm",
-        reverse_x=True,
+        reverse_x=False,
         axis_options={"title": f"{task} {dataset_shift}".replace('_','\_')},
     )
-    tikz2pdf(f'cddiagrams/{task}-{dataset_shift}.tex', f'cddiagrams/{task}-{dataset_shift}_doc.pdf')
+    tikz2pdf(f'cddiagrams/diagrams/{task}-{dataset_shift}.tex', f'cddiagrams/{task}-{dataset_shift}_doc.pdf')
+
 
 
 
