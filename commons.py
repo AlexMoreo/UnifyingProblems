@@ -143,4 +143,4 @@ def uci_datasets(top_length_k=10):
         (dataset, len(qp.datasets.fetch_UCIBinaryLabelledCollection(dataset)))
         for dataset in qp.datasets.UCI_BINARY_DATASETS
     ], key=lambda x:x[1])[-top_length_k:]))
-    return datasets_selected
+    return list(datasets_selected)

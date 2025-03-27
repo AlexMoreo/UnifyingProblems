@@ -80,11 +80,11 @@ def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):
     # Calibration methods
     Ftr = setup.train.hidden
     ytr = setup.train.labels
-    # yield 'LasCal-q-S', LasCal2Quant(classifier, prob2logits=True)
+    yield 'LasCal-q-S', LasCal2Quant(classifier, prob2logits=True)
     yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
-    # yield 'TransCal-q-S', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
+    yield 'TransCal-q-S', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
     yield 'TransCal-q-P', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
-    # yield 'Cpcs-q-S', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
+    yield 'Cpcs-q-S', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
     yield 'Cpcs-q-P', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
     ## yield 'Head2Tail-q-S', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
     #yield 'Head2Tail-q-P', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=False)

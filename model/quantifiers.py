@@ -17,6 +17,7 @@ from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, 
 from util import posterior_probabilities
 from abc import abstractmethod
 
+
 class Method2Quant(BaseQuantifier):
     @abstractmethod
     def fit(self, data, *args, **kwargs):

@@ -1,21 +1,31 @@
 - Add to requirements LasCal stuff: clone project, install:
     - rich, cvxpy
 
-Running:
-- oficina:
-    cap_experiments at 250
-    calibration covariate_shift Cpcs
-- barracuda
-    calibration covariate_shift Lascal
-    calibration covariate_shift Transcal [completo]
-    calibration covariate_shift Head2Tail [lo he parado, va demasiado lento]
+Understand -S or -P:
+- Calibration:
+    - covariate shift: TransCal-S, CPCS-S, LasCal-S
+    - label shift: estaban calculados TransCal-S, CPCS-S, LasCal-S
+        estoy lanzado los -P
+- CAP:
+    - covariate shift: TransCal-S, CPCS-S, LasCal-P va mejorcillo 
+    - label shift: TransCal-S, CPCS-S, LasCal-P va mejorcillo
+- Quantification:
+    - covariate shift: mejor con  la P
+    - label shift: indiferente, tal vez algo mejor -S, van todos mal
 
-- Experiments all: reconsider size? currently is len(test)
+
+- New dedicated Methods:
+    - Calibration:
+        - covariate shift: 
+        - label shift: 
+    - CAP:
+        - covariate shift: 
+        - label shift: 
+    - Quantification:
+        - covariate shift: 
+        - label shift: EMQ-LasCal
 - Add classifiers (MLP o deep, LR, kNN, SVM, DecisionTrees) to calibration experiments
-- Add covariate shift experiments
 - Add calibration plots, and error by shift
 - Add quantification diagonal plots, and error by shift
 - Add CAP diagonal plots, and error by shift
-- Add calibration via kde distribution matching [maybe no]
-- Add calibration-extrapolation exactly as defined in their paper; no, seems that we cannot
 - Document everything

@@ -72,7 +72,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
 
     classifiers = {
         'covariate_shift': ['bert-base-uncased', 'distilbert-base-uncased', 'roberta-base'],
-        'label_shift': ['lr', 'nb', 'mlp'] if task!='quantification' else ['']
+        'label_shift': ['lr', 'nb', 'knn', 'mlp'] if task!='quantification' else ['']
     }[dataset_shift]
 
     if dataset_shift=='covariate_shift':
@@ -180,6 +180,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         'roberta-base': 'RoBERTa',
         'lr': 'Logistic Regression',
         'nb': 'Naïve Bayes',
+        'knn': 'k Nearest Neighbor',
         'mlp': 'Multi-layer Perceptron'
     }
     replace_method={
@@ -254,4 +255,4 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
     filename = f'{task}_{dataset_shift}'
     tabular_path = join(tables_path, 'tabular', f'{filename}.tex')
     util.save_text(tabular_path, '\n'.join(lines))
-    tabular2pdf(tabular_path, join(tables_path, f'{filename}.pdf'), landscape=True, resizebox=True)
+    tabular2pdf(tabular_path, join(tables_path, f'{filename}.pdf'), landscape=False, resizebox=True)
