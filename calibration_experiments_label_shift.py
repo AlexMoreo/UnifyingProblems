@@ -1,4 +1,3 @@
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 import pandas as pd
 import numpy as np
@@ -158,74 +157,75 @@ def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
         raise ValueError(f'unrecognized calibrator method {model}')
 
 
-all_results = []
-method_order = []
+if __name__ == '__main__':
+    all_results = []
+    method_order = []
 
-n_classifiers = len([c for _,c in classifiers()])
-pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
-for dataset, (cls_name, cls) in pbar:
-    pbar.set_description(f'running: {dataset}')
+    n_classifiers = len([c for _,c in classifiers()])
+    pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
+    for dataset, (cls_name, cls) in pbar:
+        pbar.set_description(f'running: {dataset}')
 
-    data = qp.datasets.fetch_UCIBinaryDataset(dataset)
-    train, test = data.train_test
-    train_prev = train.prevalence()
-    train, val = train.split_stratified(0.5, random_state=0)
+        data = qp.datasets.fetch_UCIBinaryDataset(dataset)
+        train, test = data.train_test
+        train_prev = train.prevalence()
+        train, val = train.split_stratified(0.5, random_state=0)
 
-    Xtr, ytr = train.Xy
-    cls.fit(Xtr, ytr)
+        Xtr, ytr = train.Xy
+        cls.fit(Xtr, ytr)
 
-    Xva, yva = val.Xy
-    Pva = cls.predict_proba(Xva)
+        Xva, yva = val.Xy
+        Pva = cls.predict_proba(Xva)
 
-    # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
-    app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, return_type='labelled_collection')
+        # sample generation protocol ("artificial prevalence protocol" -- generates prior probability shift)
+        app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, return_type='labelled_collection')
 
-    for name, calibrator in calibration_methods(cls):
-        if name not in method_order:
-            method_order.append(name)
+        for name, calibrator in calibration_methods(cls):
+            if name not in method_order:
+                method_order.append(name)
 
-        result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
-        if os.path.exists(result_method_dataset_path):
-            report = pd.read_csv(result_method_dataset_path)
-        else:
-            method_dataset_results = []
-            for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}'):
-                Xte, yte = test_shifted.Xy
-                Pte = cls.predict_proba(Xte)
+            result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
+            if os.path.exists(result_method_dataset_path):
+                report = pd.read_csv(result_method_dataset_path)
+            else:
+                method_dataset_results = []
+                for id, test_shifted in tqdm(enumerate(app()), total=app.total(), desc=f'model={name}'):
+                    Xte, yte = test_shifted.Xy
+                    Pte = cls.predict_proba(Xte)
 
-                Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
-                ece_cal = cal_error(Pte_cal, yte)
-                brier_score = brier_score_loss(y_true=yte, y_proba=Pte_cal[:,1])
+                    Pte_cal = calibrate(calibrator, Xtr, ytr, Xva, Pva, yva, Xte, Pte)
+                    ece_cal = cal_error(Pte_cal, yte)
+                    brier_score = brier_score_loss(y_true=yte, y_proba=Pte_cal[:,1])
 
-                shift = qp.error.ae(test_shifted.prevalence(), train_prev)
-                result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, ece=ece_cal, brier=brier_score)
-                method_dataset_results.append(asdict(result))
+                    shift = qp.error.ae(test_shifted.prevalence(), train_prev)
+                    result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, ece=ece_cal, brier=brier_score)
+                    method_dataset_results.append(asdict(result))
 
-            report = pd.DataFrame(method_dataset_results)
-            report.to_csv(result_method_dataset_path, index=False)
+                report = pd.DataFrame(method_dataset_results)
+                report.to_csv(result_method_dataset_path, index=False)
 
-        all_results.append(report)
+            all_results.append(report)
 
-df = pd.concat(all_results)
+    df = pd.concat(all_results)
 
-from new_table import LatexTable
+    from new_table import LatexTable
 
-tables = []
-for classifier_name, _ in classifiers():
-    df_h = df[df['classifier']==classifier_name]
-    table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
-    table_ece.name = f'calibration_pps_ECE_{classifier_name}'
-    table_ece.reorder_methods(method_order)
-    table_ece.format.configuration.show_std=False
-    table_ece.format.configuration.side_columns = True
-    tables.append(table_ece)
+    tables = []
+    for classifier_name, _ in classifiers():
+        df_h = df[df['classifier']==classifier_name]
+        table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
+        table_ece.name = f'calibration_pps_ECE_{classifier_name}'
+        table_ece.reorder_methods(method_order)
+        table_ece.format.configuration.show_std=False
+        table_ece.format.configuration.side_columns = True
+        tables.append(table_ece)
 
-    table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
-    table_brier.name = f'calibration_pps_brier_{classifier_name}'
-    table_brier.reorder_methods(method_order)
-    table_brier.format.configuration.show_std = False
-    table_brier.format.configuration.side_columns = True
-    tables.append(table_brier)
+        table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
+        table_brier.name = f'calibration_pps_brier_{classifier_name}'
+        table_brier.reorder_methods(method_order)
+        table_brier.format.configuration.show_std = False
+        table_brier.format.configuration.side_columns = True
+        tables.append(table_brier)
 
-LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)
+    LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)
 

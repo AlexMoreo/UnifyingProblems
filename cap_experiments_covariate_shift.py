@@ -30,6 +30,9 @@ class ResultRow:
     method: str
     classifier: str
     err: float
+    true_acc: float
+    estim_acc: float
+
 
 
 def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
@@ -110,7 +113,10 @@ for setup in pbar:
                     shift=shift,
                     method=name,
                     classifier=setup.model,
-                    err=err_cap)
+                    err=err_cap,
+                    true_acc=acc_true,
+                    estim_acc=acc_estim
+                )
                 method_setup_results.append(asdict(result))
 
             report = pd.DataFrame(method_setup_results)

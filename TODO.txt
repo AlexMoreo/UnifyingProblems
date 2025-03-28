@@ -1,5 +1,5 @@
 - Add to requirements LasCal stuff: clone project, install:
-    - rich, cvxpy
+    - rich, cvxpy, pycalib, seaborn
 
 Understand -S or -P:
 - Calibration:

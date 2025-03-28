@@ -33,6 +33,8 @@ class ResultRow:
     classifier: str
     shift: float
     err: float
+    true_acc: float
+    estim_acc: float
 
 
 def cap_methods(h:BaseEstimator, Xva, yva):
@@ -109,7 +111,7 @@ for dataset, (cls_name, h) in pbar:
                 err_cap = cap_error(acc_true=acc_true, acc_estim=acc_estim)
 
                 shift = qp.error.ae(test_shifted.prevalence(), train_prev)
-                result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, err=err_cap)
+                result = ResultRow(dataset=dataset, id=id, method=name, classifier=cls_name, shift=shift, err=err_cap, true_acc=acc_true, estim_acc=acc_estim)
                 method_dataset_results.append(asdict(result))
 
             report = pd.DataFrame(method_dataset_results)
@@ -118,9 +120,6 @@ for dataset, (cls_name, h) in pbar:
         all_results.append(report)
 
 df = pd.concat(all_results)
-
-
-df.to_pickle('./cap_label_shift.pkl', protocol=pickle.HIGHEST_PROTOCOL)
 
 from new_table import LatexTable
 
