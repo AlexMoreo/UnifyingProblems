@@ -133,7 +133,7 @@ for dataset in uci_datasets()+[None]:
 
     if dataset is None:
         dataset='all'
-    path = f'figures/diagonal/quantification_{dataset}.pdf'
+    path = f'figures/diagonal/{task}/{dataset}.pdf'
     binary_diagonal(
         method_names=method_names,
         true_prevs=true_prevs,
