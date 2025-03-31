@@ -13,7 +13,8 @@ from sklearn.base import BaseEstimator, clone
 
 from lascal import EceLabelShift, get_importance_weights
 from model.classifier_accuracy_predictors import ClassifierAccuracyPrediction, ATC, DoC, LEAP
-from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator, CpcsCalibrator
+from model.classifier_calibrators import LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator, CpcsCalibrator, \
+    CalibratorSimple
 from util import posterior_probabilities
 from abc import abstractmethod
 
@@ -140,6 +141,26 @@ class LasCal2Quant(Method2Quant):
         return prev_estim
 
 
+class EMLasCal2Quant(Method2Quant):
+    def __init__(self, classifier, prob2logits=True):
+        self.classifier = classifier
+        self.lascal = LasCalCalibration(prob2logits)
+
+    def fit(self, data: LabelledCollection, *args, **kwargs):
+        self.train_prevalence = data.prevalence()
+        X, y = data.Xy
+        P = posterior_probabilities(self.classifier, X)
+        self.Ptr = P
+        self.ytr = y
+        return self
+
+    def quantify(self, X, *args, **kwargs):
+        P_uncal = posterior_probabilities(self.classifier, X)
+        P_lascal = self.lascal.calibrate(self.Ptr, self.ytr, P_uncal)
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P_lascal)
+        return priors
+
+
 class CalibratorCompound2Quant(Method2Quant):
     def __init__(self, classifier, Ftr, ytr, calibrator_cls, prob2logits=True):
         self.classifier = classifier
@@ -179,9 +200,31 @@ class Cpcs2Quant(CalibratorCompound2Quant):
         super().__init__(classifier, Ftr, ytr, calibrator_cls=CpcsCalibrator, prob2logits=prob2logits)
 
 
-class HeadToTail2Quant(CalibratorCompound2Quant):
-    def __init__(self, classifier, Ftr, ytr, prob2logits=True):
-        super().__init__(classifier, Ftr, ytr, calibrator_cls=HeadToTailCalibrator, prob2logits=prob2logits)
+# class HeadToTail2Quant(CalibratorCompound2Quant):
+#     def __init__(self, classifier, Ftr, ytr, prob2logits=True):
+#         super().__init__(classifier, Ftr, ytr, calibrator_cls=HeadToTailCalibrator, prob2logits=prob2logits)
+
+class HeadToTail2Quant(Method2Quant):
+    def __init__(self, classifier, Ftr, ytr, prob2logits=True, n_components=None):
+        self.classifier = classifier
+        self.Ftr = Ftr
+        self.ytr = ytr
+        self.head2tails = HeadToTailCalibrator(prob2logits, n_components=n_components)
+
+    def fit(self, data: LabelledCollection, hidden=None, *args, **kwargs):
+        X, y = data.Xy
+        P = posterior_probabilities(self.classifier, X)
+        Fsrc = X if hidden is None else hidden
+        self.head2tails.fit(Ftr=self.Ftr, ytr=self.ytr, Fsrc=Fsrc, Zsrc=P, ysrc=y)
+        return self
+
+    def quantify(self, instances, *args, **kwargs):
+        P_uncal = posterior_probabilities(self.classifier, instances)
+        P_cal = self.head2tails.calibrate(P_uncal)
+        prev_estim = P_cal.mean(axis=0)
+        return prev_estim
+
+
 
 
 class PACCLasCal(PACC):
@@ -192,7 +235,8 @@ class PACCLasCal(PACC):
                  solver: Literal['minimize', 'exact', 'exact-raise', 'exact-cc'] = 'minimize',
                  method: Literal['inversion', 'invariant-ratio'] = 'inversion',
                  norm: Literal['clip', 'mapsimplex', 'condsoftmax'] = 'clip',
-                 n_jobs=None
+                 n_jobs=None,
+                 prob2logits=True
     ):
         self.classifier = qp._get_classifier(classifier)
         self.val_split = val_split
@@ -200,90 +244,31 @@ class PACCLasCal(PACC):
         self.solver = solver
         self.method = method
         self.norm = norm
+        self.prob2logits = prob2logits
 
     def aggregation_fit(self, classif_predictions: LabelledCollection, data: LabelledCollection):
         self.Ptr, self.ytr = classif_predictions.Xy
-        self.lascal = LasCalCalibration()
+        self.lascal = LasCalCalibration(prob2logits=self.prob2logits)
         super().aggregation_fit(classif_predictions, data)
         return self
 
     def aggregate(self, classif_predictions: np.ndarray):
         P_uncal = classif_predictions
-        P_calib = self.lascal.predict_proba(self.Ptr, self.ytr, P_uncal)
+        P_calib = self.lascal.calibrate(self.Ptr, self.ytr, P_uncal)
         return super().aggregate(P_calib)
 
 
-class EMQLasCal(EMQ):
+class EMQ_BCTS(EMQ):
+    def __init__(self, classifier = None):
+        super().__init__(classifier, val_split=None, exact_train_prev=False, recalib='bcts', n_jobs=None)
 
-    def __init__(self, classifier: BaseEstimator = None, val_split=None, n_jobs=None):
-        self.classifier = qp._get_classifier(classifier)
-        self.val_split = val_split
-        self.exact_train_prev = True
-        self.recalib = None
-        self.n_jobs = n_jobs
-
-    def aggregation_fit(self, classif_predictions: LabelledCollection, data: LabelledCollection):
-        self.Ptr, self.ytr = classif_predictions.Xy
-        # self.lascal = LasCalCalibration()
-        return self
-
-    def aggregate(self, classif_predictions: np.ndarray):
-        from scipy.special import softmax
-        # P_uncal = classif_predictions
-        # P_calib = self.lascal.predict_proba(self.Ptr, self.ytr, P_uncal)
-        Ptr = torch.from_numpy(self.Ptr)
-        ytr = torch.from_numpy(self.ytr)
-        P_uncal = torch.from_numpy(classif_predictions)
-        temperature = lascal_fn(Ptr, ytr, P_uncal)
-        Ptr = softmax(self.Ptr / temperature, axis=1)
-        P_calib = softmax(P_uncal / temperature, axis=1)
-        fit_data = LabelledCollection(Ptr, self.ytr)
-        super().aggregation_fit(fit_data, fit_data)
-        return super().aggregate(P_calib)
-
-
-# local (simplified) copy of lascal.post_hoc_calibration.calibrator:lascal
-def lascal_fn(Str, ytr, Ste):
-    import torch
-    weights_method = "rlls-hard"
-    p = 2
-    classwise = True
-
-    ece_criterion = EceLabelShift(
-        p=p, n_bins=15, adaptive_bins=True, classwise=classwise
-    )
-    optim_temp = -1
-    best_loss = torch.finfo(torch.float).max
-
-    STEPS = 100
-    MIN_TEMP = 0.1
-    MAX_TEMP = 20.0
-    for temp in torch.linspace(MIN_TEMP, MAX_TEMP, steps=STEPS):
-        # Prepare source labels
-        num_classes = Str.size(1)
-        y_source_ohe = np.eye(num_classes)[ytr.numpy()].astype(
-            float
-        )
-        scaled_logits_source = Str / temp
-        scaled_logits_target = Ste / temp
-        # Get weight
-        output = get_importance_weights(
-            valid_preds=scaled_logits_source.softmax(-1).numpy(),
-            valid_labels=y_source_ohe,
-            shifted_test_preds=scaled_logits_target.softmax(-1).numpy(),
-            method=weights_method,
-        )
-        # Measure loss
-        loss = ece_criterion(
-            logits_source=scaled_logits_source,
-            labels_source=ytr,
-            logits=scaled_logits_target,
-            weights=output["weights"],
-        ).mean()
-        if loss < best_loss:
-            best_loss = loss
-            optim_temp = temp
-
-    return optim_temp
-
+    def fit(self, data, fit_classifier=True, val_split=None):
+        try:
+            return super().fit(data, fit_classifier, val_split)
+        except AssertionError:
+            print('Abstention raised an error. Backing up to EMQ without recalibration')
+            self.val_split=None
+            self.exact_train_prev=True
+            self.recalib=None
+            return self.fit(data, fit_classifier, val_split)
 

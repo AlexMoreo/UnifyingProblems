@@ -1,5 +1,5 @@
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML
+from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML, ACC
 from quapy.method.base import BaseQuantifier
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from quapy.protocol import NaturalPrevalenceProtocol
@@ -45,19 +45,7 @@ def new_natural_protocol(X, y, classes):
     )
     return app
 
-class EMQ_BCTS(EMQ):
-    def __init__(self, classifier = None):
-        super().__init__(classifier, val_split=None, exact_train_prev=False, recalib='bcts', n_jobs=None)
 
-    def fit(self, data, fit_classifier=True, val_split=None):
-        try:
-            return super().fit(data, fit_classifier, val_split)
-        except AssertionError:
-            print('Abstention raised an error. Backing up to EMQ without recalibration')
-            self.val_split=None
-            self.exact_train_prev=True
-            self.recalib=None
-            return self.fit(data, fit_classifier, val_split)
 
 
 
@@ -80,14 +68,12 @@ def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):
     # Calibration methods
     Ftr = setup.train.hidden
     ytr = setup.train.labels
-    yield 'LasCal-q-S', LasCal2Quant(classifier, prob2logits=True)
     yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
-    yield 'TransCal-q-S', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
     yield 'TransCal-q-P', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
-    yield 'Cpcs-q-S', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=True)
     yield 'Cpcs-q-P', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
-    ## yield 'Head2Tail-q-S', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=True)
-    #yield 'Head2Tail-q-P', Head2Tail2Quant(classifier, Xtr, ytr, prob2logits=False)
+    # yield 'Head2Tail-q-S', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=True)
+    yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=False, n_components=50)
+    # yield 'Head2Tail-q-S', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=True, n_components=50)
     ## yield 'PACC(LasCal)', PACCLasCal(classifier)
     ## yield 'EMQ(LasCal)', EMQLasCal(classifier)
 

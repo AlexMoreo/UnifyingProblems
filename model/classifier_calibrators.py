@@ -16,7 +16,7 @@ from methods import HeadToTail, Cpcs, TransCal
 from quapy.method.aggregative import DistributionMatchingY, EMQ, ACC, PACC
 from scipy.special import softmax
 from abc import ABC, abstractmethod
-from sklearn.calibration import _fit_calibrator
+from sklearn.decomposition import PCA
 
 
 
@@ -68,16 +68,16 @@ class UncalibratedWrap(CalibratorSimple):
             return Z
 
 
-class NaiveUncertain(CalibratorSimple):
-    def __init__(self, train_prev=None):
-        self.train_prev = train_prev
-
-    def calibrate(self, Z):
-        if self.train_prev is None:
-            uncertain = np.full_like(Z, fill_value=0.5)
-        else:
-            uncertain = np.tile(self.train_prev, (Z.shape[0],1))
-        return uncertain
+# class NaiveUncertain(CalibratorSimple):
+#     def __init__(self, train_prev=None):
+#         self.train_prev = train_prev
+#
+#     def calibrate(self, Z):
+#         if self.train_prev is None:
+#             uncertain = np.full_like(Z, fill_value=0.5)
+#         else:
+#             uncertain = np.tile(self.train_prev, (Z.shape[0],1))
+#         return uncertain
 
 
 class PlattScaling(CalibratorSimple):
@@ -161,6 +161,19 @@ class LasCalCalibration(CalibratorSourceTarget):
                 Pte_calib = softmax(Ztgt, axis=1)
 
         return Pte_calib
+
+
+class EMLasCal(LasCalCalibration):
+
+    def __init__(self, train_prevalence, prob2logits=True):
+        self.emq = EMQ()
+        self.train_prevalence = train_prevalence
+        self.prob2logits = prob2logits
+
+    def calibrate(self, Zsrc, ysrc, Ztgt):
+        P_lascal = super().calibrate(Zsrc, ysrc, Ztgt)
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P_lascal)
+        return posteriors
 
 
 class EMBCTSCalibration_depr(CalibratorSourceTarget):
@@ -301,12 +314,19 @@ class CpcsCalibrator(CalibratorCompound):
 # HeadToTail [Chen and Su, 2023]
 class HeadToTailCalibrator(CalibratorSimple):
 
-    def __init__(self, prob2logits=True):
+    def __init__(self, prob2logits=True, n_components=None):
         self.prob2logits = prob2logits
+        self.n_components = n_components
 
     def fit(self, Ftr, ytr, Fsrc, Zsrc, ysrc):
         if self.prob2logits:
             Zsrc = np_prob2logit(Zsrc)
+
+        if self.n_components is not None and Ftr.shape[1]>self.n_components:
+            print(f'reducing to {self.n_components} principal components')
+            pca = PCA(n_components=self.n_components)
+            Ftr = pca.fit_transform(Ftr)
+            Fsrc = pca.transform(Fsrc)
 
         head_to_tail = HeadToTail(
             num_classes=2,

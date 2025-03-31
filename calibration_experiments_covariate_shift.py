@@ -52,7 +52,7 @@ def calibrators(setup):
     yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
     # yield '?', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
-    yield 'Head2Tail', HeadToTailCalibrator(prob2logits=True).fit(
+    yield 'Head2Tail', HeadToTailCalibrator(prob2logits=True, n_components=50).fit(
         Ftr=setup.train.hidden, ytr=setup.train.labels,
         Fsrc=setup.valid.hidden, Zsrc=setup.valid.posteriors, ysrc=setup.valid.labels
     )

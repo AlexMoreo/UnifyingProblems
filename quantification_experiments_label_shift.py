@@ -1,5 +1,5 @@
 from quapy.data import LabelledCollection
-from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML
+from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML, ACC
 from quapy.method.base import BaseQuantifier
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from quapy.protocol import UPP, ArtificialPrevalenceProtocol
@@ -43,6 +43,7 @@ def quantifiers(classifier, Xtr, ytr):
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
     yield 'EMQ', EMQ(classifier)
+    yield 'EMQ-BCTS', EMQ_BCTS(classifier)
     yield 'KDEy', KDEyML(classifier)
 
     # CAP methods
@@ -51,19 +52,13 @@ def quantifiers(classifier, Xtr, ytr):
     yield 'LEAP-q', LEAP2Quant(classifier)
 
     # Calibration methods
-    yield 'Cpcs-q-S', Cpcs2Quant(classifier, Xtr, ytr, prob2logits=True)
     yield 'Cpcs-q-P', Cpcs2Quant(classifier, Xtr, ytr, prob2logits=False)
-
-    yield 'TransCal-q', Transcal2Quant(classifier, Xtr, ytr, prob2logits=True)
     yield 'TransCal-q-P', Transcal2Quant(classifier, Xtr, ytr, prob2logits=False)
-
-    yield 'LasCal-q', LasCal2Quant(classifier, prob2logits=True)
     yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
+    yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=False, n_components=50)
 
-    yield 'Head2Tail-q', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=True)
-    yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=False)
-    # yield 'PACC(LasCal)', PACCLasCal(classifier)
-    # yield 'EMQ(LasCal)', EMQLasCal(classifier)
+    yield 'PACC(LasCal)', PACCLasCal(classifier, prob2logits=True)
+    yield 'EMQ(LasCal)2-S', EMLasCal2Quant(classifier, prob2logits=True)
 
 
 def fit_quantifier(quant, train, val):

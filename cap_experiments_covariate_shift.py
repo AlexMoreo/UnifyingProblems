@@ -68,7 +68,7 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'PCC-a', Quant2CAP(classifier=h, quantifier_class=PCC).fit(x_val_idx, yva)
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(x_val_idx, yva)
     yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(x_val_idx, yva)
-    # yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
+    yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
     yield 'EMQ-BCTS-a', Quant2CAP(classifier=h, quantifier_class=EMQ.EMQ_BCTS).fit(x_val_idx, yva)
 
 

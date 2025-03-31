@@ -63,6 +63,7 @@ def calibration_methods(classifier):
     # from quantification
     yield 'EM', EM(train.prevalence())
     # yield 'EM-BCTS', EMBCTSCalibration()
+    yield 'EMLasCal', EMLasCal(train.prevalence(), prob2logits=True)
     for nbins in [8]: #20, 25, 30, 35, 40]:
         dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
         preclassified = LabelledCollection(Pva, yva)
