@@ -176,52 +176,6 @@ class EMLasCal(LasCalCalibration):
         return posteriors
 
 
-class EMBCTSCalibration_depr(CalibratorSourceTarget):
-
-    def __init__(self, prob2logits=True):
-        self.prob2logits = prob2logits
-
-    def calibrate(self, Zsrc, ysrc, Ztgt):
-
-        calibrator = Calibrator(
-            experiment_path=None,
-            verbose=False,
-            covariate=False,
-        )
-
-        Zsrc = np2tensor(Zsrc, probability_to_logit=self.prob2logits)
-        Ztgt = np2tensor(Ztgt, probability_to_logit=self.prob2logits)
-        ysrc = np2tensor(ysrc)
-        yte = None
-
-        source_agg = {
-            'y_logits': Zsrc,
-            'y_true': ysrc
-        }
-        target_agg = {
-            'y_logits': Ztgt,
-            'y_true': yte
-        }
-
-        try:
-            calibrated_agg = calibrator.calibrate(
-                method_name='em_alexandari',
-                source_agg=source_agg,
-                target_agg=target_agg,
-                train_agg=None,
-            )
-
-            y_logits = calibrated_agg['target']['y_logits']
-            Pte_calib = y_logits.softmax(-1).numpy()
-            # print('good')
-            return Pte_calib
-        except AssertionError:
-            # print('assertion')
-            Pte = UncalibratedWrap().calibrate(Zsrc.numpy())
-            # print(Zsrc.shape)
-            # print(Pte.shape)
-            return Pte
-
 
 class EMQ_BCTS_Calibrator(CalibratorSimple):
 
@@ -348,15 +302,27 @@ class HeadToTailCalibrator(CalibratorSimple):
         return Pte_recalib
     
 
+class EMTransCal(TransCalCalibrator):
+
+    def __init__(self, train_prevalence, prob2logits=True):
+        self.emq = EMQ()
+        self.train_prevalence = train_prevalence
+        self.prob2logits = prob2logits
+
+    def calibrate(self, Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt):
+        P_calib = super().calibrate(Ftr, ytr, Fsrc, Zsrc, ysrc, Ftgt, Ztgt)
+        priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P_calib)
+        return posteriors
+
+
 # -------------------------------------------------------------
 # Based on Quantification
 # -------------------------------------------------------------
 class HellingerDistanceCalibration(CalibratorSimple):
 
-    def __init__(self, hdy:DistributionMatchingY, smooth=False, monotonicity=False, postsmooth=False):
+    def __init__(self, hdy:DistributionMatchingY, smooth=True, monotonicity=True):
         self.hdy = hdy
         self.smooth = smooth
-        self.postsmooth=postsmooth
         self.monotonicity = monotonicity
 
     def calibrate(self, Z):
@@ -382,8 +348,8 @@ class HellingerDistanceCalibration(CalibratorSimple):
             ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
         uncalibrated_posteriors_pos = Z[:, 1]
         posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, calibration_map)
-        if self.postsmooth:
-            posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
+        # if self.postsmooth:
+        #     posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
 

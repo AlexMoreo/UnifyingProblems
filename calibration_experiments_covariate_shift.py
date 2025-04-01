@@ -40,16 +40,9 @@ def calibrators(setup):
     Pva = setup.valid.posteriors
     yva = setup.valid.labels
 
-    yield 'Uncal', UncalibratedWrap()
-    # yield 'NaiveUncertain', NaiveUncertain()
-    # yield 'NaiveTrain', NaiveUncertain(train_prev)
-
     # proper calibration methods
     yield 'Platt', PlattScaling().fit(Pva, yva)
-    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
 
-    yield 'EM', EM(train_prevalence=setup.train.prevalence)
-    yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
     # yield '?', PACCcal(softmax(valid_logits, axis=1), valid_y)
     yield 'TransCal', TransCalCalibrator(prob2logits=False)
     yield 'Head2Tail', HeadToTailCalibrator(prob2logits=True, n_components=50).fit(
@@ -58,6 +51,10 @@ def calibrators(setup):
     )
     yield 'CPCS', CpcsCalibrator(prob2logits=False)
     yield 'LasCal', LasCalCalibration(prob2logits=False)
+
+    yield 'EM', EM(train_prevalence=setup.train.prevalence)
+    yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
+    yield 'EM-TransCal', EMTransCal(train_prevalence=setup.train.prevalence, prob2logits=False)
 
     h = PrecomputedClassifier()
     val_idx = h.feed(X=setup.valid.hidden, P=setup.valid.posteriors, L=setup.valid.logits)
@@ -73,11 +70,10 @@ def calibrators(setup):
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
     
 
-    ##yield 'PACC-cal', PACCcal(Pva, yva)
-    yield 'PACC-cal(clip)', PACCcal(Pva, yva, post_proc='clip')
+    # yield 'PACC-cal(clip)', PACCcal(Pva, yva, post_proc='clip')
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
-    yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
-    yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')  
+    # yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
+    # yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
 
     yield 'Bin6-PCC5', QuantifyCalibrator(classifier=h, quantifier_cls=PCC, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva) # smooth and mono
     yield 'Bin6-PACC5', QuantifyCalibrator(classifier=h, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True).fit(val_idx, yva) # smooth and mono
@@ -99,8 +95,8 @@ def calibrators(setup):
 
 
     yield 'Bin2-DoC6', CAPCalibrator(classifier=h, cap_method=DoC(h, protocol=new_labelshift_protocol(val_idx,yva,[0,1])), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
-    
     yield 'Bin2-LEAP6', CAPCalibrator(classifier=h, cap_method=LEAP(h, KDEyML(classifier=h)), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
+    yield 'Bin2-LEAP-PCC-6', CAPCalibrator(classifier=h, cap_method=LEAP(h, PCC(classifier=h)), nbins=6, monotonicity=True, smooth=True).fit(val_idx, yva)
 
 
 

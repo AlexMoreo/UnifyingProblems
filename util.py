@@ -68,47 +68,50 @@ def accuracy_from_contingency_table(ct):
 def get_ranks(df: DataFrame, value, expected_repetitions=100):
     from scipy.stats import rankdata
 
-    datasets = df.dataset.unique()
-    methods = df.method.unique()
-    classifiers = df.classifier.unique() if 'classifier' in df.columns else [None]
-    ids = sorted(df.id.unique())
+    datasets = sorted(df.dataset.unique())
+    methods = sorted(df.method.unique())
+    if 'classifier' not in df.columns:
+        df['classifier']='lr' # the only classifier used in quantification experiments
+    classifiers = sorted(df.classifier.unique())
+    # classifiers = df.classifier.unique() if 'classifier' in df.columns else ['lr']
+    # ids = sorted(df.id.unique())
     n_datasets = len(datasets)
     n_methods = len(methods)
     n_classifiers = len(classifiers)
     n_experiments = expected_repetitions * n_classifiers * n_datasets
-    outcomes = np.zeros(shape=(n_methods, n_experiments))
-    by_dataset = []
+    # outcomes = np.zeros(shape=(n_methods, n_experiments))
 
-    # collect all results in a tensor of shape (n_datasets, n_methods, total_experiments), in order of experiment idx
-    for j, method in enumerate(methods):
-        df_method = df[df['method']==method]
-        method_results = []
-        for i, dataset in enumerate(datasets):
-            df_data_method = df_method[df_method['dataset']==dataset]
-            method_dataset_results = []
-            for k, classifier in enumerate(classifiers):
-                if classifier is not None:
-                    df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
-                else:
-                    df_data_method_cls = df_data_method
-                if len(df_data_method_cls)!=expected_repetitions:
-                    raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
-                for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
-                    method_dataset_results.append(val)
-                    by_dataset.append({
-                        'method': method,
-                        'dataset': dataset+str(id),
-                        'score': 1-val
-                    })
-            # by_dataset.append({
-            #     'method': method,
-            #     'dataset': dataset,
-            #     'score': np.mean(method_dataset_results)
-            # })
-            method_results.extend(method_dataset_results)
-        outcomes[j]=np.asarray(method_results)
+    df_sorted = df.sort_values(by=["dataset", "classifier", "id"])
+    matrix = df_sorted.pivot_table(index="method", columns=["dataset", "classifier", "id"], values=value)
+    outcomes = matrix.to_numpy()
+    by_dataset = [{'method': method, 'dataset': idx, 'score': 1-val} for m, method in enumerate(methods) for idx, val in enumerate(outcomes[m])]
 
-    ranks = rankdata(outcomes, axis=0)
+    # collect all results in a tensor of shape (n_methods, total_experiments), in order of experiment idx
+    # for j, method in enumerate(methods):
+    #     df_method = df[df['method']==method]
+    #     method_results = []
+    #     for i, dataset in enumerate(datasets):
+    #         df_data_method = df_method[df_method['dataset']==dataset]
+    #         method_dataset_results = []
+    #         for k, classifier in enumerate(classifiers):
+    #             if classifier is not None:
+    #                 df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
+    #             else:
+    #                 df_data_method_cls = df_data_method
+    #             if len(df_data_method_cls)!=expected_repetitions:
+    #                 raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
+    #             for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
+    #                 method_dataset_results.append(val)
+    #                 by_dataset.append({
+    #                     'method': method,
+    #                     'dataset': dataset+str(id),
+    #                     'score': 1-val
+    #                 })
+    #         method_results.extend(method_dataset_results)
+    #     outcomes[j]=np.asarray(method_results)
+
+    outcomes = np.round(outcomes, decimals=10)  # otherwise, ties are not treated correctly due to float error precision
+    ranks = rankdata(outcomes, axis=0, method='average')
     ave_ranks = ranks.mean(axis=1)
     method_ranks = {method:ave_ranks[i] for i, method in enumerate(methods)}
     df = pd.DataFrame(by_dataset)
@@ -168,7 +171,19 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
         # establish the theoretical probability of success assuming the method and the baselines are not different
         # i.e., for 3 baselines, P(M>1 method) = 75%, P(M>2 methods) = 50%, P(M>3 methods) = 25%
         rand_expected_success = {b:1.-b/(n_baselines+1) for b in range(1, n_baselines+1)}
-        method_successes_stat  = {b:1-binom.cdf(v-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()}
+        # method_successes_stat  = {
+        #     b:1-binom.cdf(v-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()
+        # }
+        method_successes_stat = {}
+        for b, v in method_successes_count.items():
+            # we only keep testing for b baselines if the test was passed for b-1 baselines
+            keep_testing = (b==1) or (method_successes_stat[b-1]==True)
+            if keep_testing:
+                test = 1 - binom.cdf(v - 1, total_experiments, rand_expected_success[b])
+                reject = test < p_val
+            else:
+                reject = False
+            method_successes_stat[b] = reject
         method_successes_prop = {b:v/total_experiments for b,v in method_successes_count.items()}
 
         count[method] = method_successes_prop

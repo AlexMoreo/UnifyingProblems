@@ -48,20 +48,21 @@ def cap_methods(h:BaseEstimator, Xva, yva):
 
 
     # Calibration 2 CAP
-    yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    #yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     #yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
+    #yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     # yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     #yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
     yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(Xva, yva)
     # yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
+    yield 'HDc-a-sm-mono', HDC2CAP(classifier=h).fit(Xva, yva)
 
     # Quantification 2 CAP
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
-    yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(Xva, yva)
+    yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
 
 
 def classifiers():

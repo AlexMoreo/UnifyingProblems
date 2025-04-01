@@ -19,11 +19,46 @@ from os.path import join
 
 
 tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
-tasks = ['quantification']
-# dataset_shifts=['label_shift', 'covariate_shift']
+tasks = ['calibration']
+dataset_shifts=['label_shift', 'covariate_shift']
 dataset_shifts=['label_shift']
 os.makedirs('cddiagrams', exist_ok=True)
 
+replace_method = {
+    'HDcal8-sm-mono': 'DMCal',
+    'ATC-q': r'ATC$_{\rho}$',
+    'DoC-q': r'DoC$_{\rho}$',
+    'LEAP-q': r'LEAP$_{\rho}$',
+    'LEAP-PCC-q': r'LEAP$_{\rho}^{\text{PCC}}$',
+    'Cpcs-q-P': r'CPCS$_{\rho}$',
+    'CPCS-P': r'CPCS',
+    'TransCal-q-P': r'TransCal$_{\rho}$',
+    'TransCal-S': r'TransCal',
+    'LasCal-q-P': r'LasCal$_{\rho}$',
+    'LasCal-P': r'LasCal',
+    'Head2Tail-q-P': r'Head2Tail$_{\rho}$',
+    'Cpcs-a-S': r'CPCS$_{\alpha}$',
+    'TransCal-a-S': r'TransCal$_{\alpha}$',
+    'LasCal-a-P': r'LasCal$_{\alpha}$',
+    'PACC-a': r'PACC$_{\alpha}$',
+    'EMQ-a': r'EMQ$_{\alpha}$',
+    'EMQ-BCTS-a': r'EMQ$_{\alpha}^{\text{BCTS}}$',
+    'KDEy-a': r'KDEy$_{\alpha}$',
+    'HDc-a-sm-mono': r'HDC$_{\alpha}$',
+    'EM': r'EMQ',
+    'EM-BCTS': r'EMQ$^{\text{BCTS}}$',
+    'EM-TransCal': r'EMQ$^{\text{TransCal}}$',
+    'EMLasCal': r'EMQ$^{\text{LasCal}}$',
+    'PACC-cal(soft)': r'PacCal$^{\sigma}$',
+    'Bin6-PCC5': r'PCC$_{\zeta}^{(5)}$',
+    'Bin6-PACC5': r'PACC$_{\zeta}^{(5)}$',
+    'Bin6-EM5': r'EMQ$_{\zeta}^{(5)}$',
+    'Bin6-KDEy5': r'KDEy$_{\zeta}^{(5)}$',
+    'Bin2-ATC6': r'ATC$_{\zeta}^{(6)}$',
+    'Bin2-DoC6': r'DoC$_{\zeta}^{(6)}$',
+    'Bin2-LEAP6': r'LEAP$_{\zeta}^{(6)}$',
+    'Bin2-LEAP-PCC-6': r'LEAP$_{\zeta}^{\text{PCC}(6)}$',
+}
 
 
 def get_error_name(task, dataset_shift):
@@ -46,29 +81,45 @@ def get_baselines(task, dataset_shift):
 
 def get_reference(task, dataset_shift):
     reference = {
-        'calibration': ['TransCal', 'CPCS', 'LasCal'],
+        'calibration': ['Head2Tail', 'CPCS', 'TransCal', 'LasCal'],
         'classifier_accuracy_prediction': ['ATC', 'DoC', 'LEAP'],
         'quantification': ['PACC', 'EMQ', 'KDEy']
     }[task]
 
     # add specific methods
     if task=='calibration' and dataset_shift=='label_shift':
-        reference = [f'{M}-S' for M in reference] + ['LasCal-P']
+        reference = [
+            #'Head2Tail-S',
+                     'CPCS-P', 'TransCal-S', 'LasCal-P']
     if task == 'quantification' and dataset_shift=='covariate_shift':
         reference = ['PCC'] + reference
+    if task == 'classifier_accuracy_prediction' and dataset_shift=='covariate_shift':
+        reference += ['LEAP-PCC']
     return reference
 
 
 def get_contenders(task, dataset_shift):
-    contenders = {
-        'calibration': ['EM', 'HDcal8-sm-mono', 'PACC-cal(clip)', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6'],
-        'classifier_accuracy_prediction': ['TransCal-a-S', 'Cpcs-a-S', 'LasCal-a-P', 'PACC-a', 'KDEy-a', 'EMQ-a'] + (['PCC-a', 'EMQ-BCTS-a'] if dataset_shift=='covariate_shift' else []),
-        'quantification': ['ATC-q', 'DoC-q', 'LEAP-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P','Head2Tail-q-P']
-    }[task]
+    if task == 'calibration':
+        if dataset_shift == 'label_shift':
+            contenders = ['Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'EM',
+                          # 'EM-BCTS',
+                          'EMLasCal', 'PACC-cal(soft)', 'HDcal8-sm-mono']
 
-    # add specific methods
-    if task=='calibration' and dataset_shift=='label_shift':
-        contenders += ['EMLasCal']
+
+
+
+        if dataset_shift=='covariate_shift':
+            contenders = ['Bin6-PCC5', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'Bin2-LEAP-PCC-6', 'EM', 'EM-BCTS', 'PACC-cal(soft)', 'HDcal8-sm-mono'] #, 'HDcal8-sm-mono', 'PACC-cal(clip)', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6']
+    if task == 'classifier_accuracy_prediction':
+        if dataset_shift=='label_shift':
+            contenders = ['Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'PACC-a', 'EMQ-a', 'KDEy-a', 'HDc-a-sm-mono']
+        if dataset_shift=='covariate_shift':
+            contenders = ['Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'PCC-a', 'PACC-a', 'EMQ-a', 'EMQ-BCTS-a', 'KDEy-a', 'HDc-a-sm-mono']
+    if task == 'quantification':
+        if dataset_shift == 'label_shift':
+            contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P'] #, 'Head2Tail-q-P']
+        if dataset_shift == 'covariate_shift':
+            contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'LEAP-PCC-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P']
 
     return contenders
 
@@ -168,7 +219,7 @@ def gen_table(tables_folder):
     n_baselines = len(baselines)
     n_reference = len(reference)
     n_contenders = len(contenders)
-    n_rows = 2 + n_setups * n_classifiers
+    # n_rows = 2 + n_setups * n_classifiers
     n_cols = 2 + n_methods
 
     config = Configuration()
@@ -197,23 +248,13 @@ def gen_table(tables_folder):
         'knn': 'k Nearest Neighbor',
         'mlp': 'Multi-layer Perceptron'
     }
-    replace_method = {
-        'HDcal8-sm-mono': 'DM-cal',
-        'ATC-q': r'ATC$_{\rho}$',
-        'DoC-q': r'DoC$_{\rho}$',
-        'LEAP-q': r'LEAP$_{\rho}$',
-        'Cpcs-q-P': r'CPCS$_{\rho}$',
-        'TransCal-q-P': r'TransCal$_{\rho}$',
-        'LasCal-q-P': r'LasCal$_{\rho}$',
-        'Head2Tail-q-P': r'Head2Tail$_{\rho}$',
-    }
 
     # column_format = style['column_format']
     column_format = 'cc|' + 'c' * n_baselines + '|' + 'c' * n_reference + '|' + 'c' * n_contenders
     lines = []
-    lines.append('\\begin{tabular}{' + column_format + '} ' + style['TOPLINE'])
-    lines.append('\multicolumn{2}{c}{} & \multicolumn{' + str(n_baselines) + '}{c|}{Baselines} & \multicolumn{' + str(
-        n_reference) + '}{c|}{Reference} & \multicolumn{' + str(n_contenders) + '}{c}{Contenders}' + style['ENDL'])
+    lines.append(r'\begin{tabular}{' + column_format + '} ' + style['TOPLINE'])
+    lines.append(r'\multicolumn{2}{c}{} & \multicolumn{' + str(n_baselines) + r'}{c|}{Baselines} & \multicolumn{' + str(
+        n_reference) + r'}{c|}{Reference} & \multicolumn{' + str(n_contenders) + r'}{c}{Contenders}' + style['ENDL'])
     for i, classifier in enumerate(classifiers):
         table_arr = tables[classifier].as_str_array()
         prepare_strings(table_arr)
@@ -222,8 +263,8 @@ def gen_table(tables_folder):
                 table_arr[0, j] = replace_method.get(table_arr[0, j], table_arr[0, j])
             if config.side_columns:
                 for j in range(1, table_arr.shape[1]):
-                    table_arr[0, j] = '\\begin{sideways}' + table_arr[0, j] + '\;\end{sideways}'
-            header = '\multicolumn{2}{c}{} & ' + ' & '.join(table_arr[0, 1:]) + style['ENDL'] + style['MIDLINE']
+                    table_arr[0, j] = r'\begin{sideways}' + table_arr[0, j] + r'\;\end{sideways}'
+            header = r'\multicolumn{2}{c}{} & ' + ' & '.join(table_arr[0, 1:]) + style['ENDL'] + style['MIDLINE']
             lines.append(header)
         for j, row in enumerate(table_arr[1:]):
             endl = style['HLINE']
@@ -234,11 +275,11 @@ def gen_table(tables_folder):
                     endl = style['BOTTOMLINE']
 
             first_col = ' & ' if j != 0 else (
-                    '\multirow{' +
+                    r'\multirow{' +
                     str(table_arr.shape[0] - 1) +
-                    '}{*}{\\begin{sideways}' +
+                    r'}{*}{\begin{sideways}' +
                     replace_classifier.get(classifier, classifier) +
-                    '\;\end{sideways}} & '
+                    r'\;\end{sideways}} & '
             )
             line = first_col + ' & '.join(row) + style['ENDL'] + endl
             lines.append(line)
@@ -247,15 +288,15 @@ def gen_table(tables_folder):
             # add the method vs. reference comparisons
             for j in range(1, n_reference + 1):
                 first_col = ' & ' if j != 1 else (
-                            '\multirow{' + str(n_reference) + '}{*}{\\begin{sideways}Wins\;\end{sideways}} & ')
-                second_col = f' $\Pr(M\succ {j}R)$ &'
+                            r'\multirow{' + str(n_reference) + r'}{*}{\begin{sideways}Wins\;\end{sideways}} & ')
+                second_col = r' $\Pr(M\succ {' + str(j) +r'}R)$ &'
                 parts = []
                 for k, method in enumerate(all_methods):
                     if method in counts:
                         count = counts[method][j] * 100
                         stat = reject_H0[method][j]
-                        dag = '\dag ' if stat else ''
-                        parts.append(f'${dag}{count:.2f}\%$')
+                        dag = r'\dag ' if stat else ''
+                        parts.append(f'${dag}{count:.2f}'+r'\%$')
                     else:
                         parts.append('---')
                 endl = style['HLINE'] if j < n_reference else style['BOTTOMLINE']
@@ -265,9 +306,9 @@ def gen_table(tables_folder):
             # add the average ranks
             method_ranks = np.asarray([ranks[method] for method in all_methods])
             order = np.argsort(method_ranks)
-            top_3_ranks = set(order[:3])
+            top_n_ranks = set(order[:n_reference])
             parts = [f'{m_rank:.2f}' for m_rank in method_ranks]
-            parts = [f'\\textbf{{{m_rank}}}' if pos in top_3_ranks else m_rank for pos, m_rank in enumerate(parts)]
+            parts = [f'\\textbf{{{m_rank}}}' if pos in top_n_ranks else m_rank for pos, m_rank in enumerate(parts)]
             line = '  & Ave Rank &' + ' & '.join(parts) + style['ENDL'] + style['BOTTOMLINE']
             lines.append(line)
 
@@ -299,6 +340,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
     counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
     ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
 
-    critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
+    cd_df['method'] = cd_df['method'].replace(replace_method)
+    # critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
     gen_table(tables_folder='./fulltables/')
 

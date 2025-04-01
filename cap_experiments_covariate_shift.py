@@ -54,15 +54,11 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'LEAP-PCC', LEAP(classifier=h, q_class=PCC(classifier=h)).fit(x_val_idx, yva)
 
     # Calibration 2 CAP
-    yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
-    # yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
-    # yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
+    yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
+    yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(x_val_idx, yva)
     #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(x_val_idx, yva)
     ## yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    # yield 'LasCal-a-S', LasCal2CAP(classifier=h, probs2logits=True).fit(x_val_idx, yva)
-    yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(x_val_idx, yva)
-    ## yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
 
     # Quantification 2 CAP
     yield 'PCC-a', Quant2CAP(classifier=h, quantifier_class=PCC).fit(x_val_idx, yva)
@@ -71,6 +67,7 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
     yield 'EMQ-BCTS-a', Quant2CAP(classifier=h, quantifier_class=EMQ.EMQ_BCTS).fit(x_val_idx, yva)
 
+    yield 'HDc-a-sm-mono', HDC2CAP(classifier=h).fit(x_val_idx, yva)
 
 
 all_results = []

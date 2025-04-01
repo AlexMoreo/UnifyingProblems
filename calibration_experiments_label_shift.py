@@ -41,20 +41,21 @@ class ResultRow:
 
 
 def calibration_methods(classifier):
-    yield 'Uncal', UncalibratedWrap()
-    # yield 'NaiveUncertain', NaiveUncertain()
-    # yield 'NaiveTrain', NaiveUncertain(train_prev)
+    # yield 'Uncal', UncalibratedWrap()
 
     # proper calibration methods
     yield 'Platt', PlattScaling().fit(Pva, yva)
-    yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
+    # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
     yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
     yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
-    # yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True).fit(
+    # yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True, n_components=50).fit(
     #     Ftr=Xtr, ytr=ytr,
     #     Fsrc=Xva, Zsrc=Pva, ysrc=yva
     # )
-    # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False)
+    # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False, n_components=50).fit(
+    #     Ftr=Xtr, ytr=ytr,
+    #     Fsrc=Xva, Zsrc=Pva, ysrc=yva
+    # )
     yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
     yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
     yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
@@ -62,7 +63,7 @@ def calibration_methods(classifier):
 
     # from quantification
     yield 'EM', EM(train.prevalence())
-    # yield 'EM-BCTS', EMBCTSCalibration()
+    yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
     yield 'EMLasCal', EMLasCal(train.prevalence(), prob2logits=True)
     for nbins in [8]: #20, 25, 30, 35, 40]:
         dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
@@ -73,49 +74,14 @@ def calibration_methods(classifier):
         yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
         # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
         # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
-    yield 'PACC-cal(clip)', PACCcal(Pva, yva)
+    # yield 'PACC-cal(clip)', PACCcal(Pva, yva)
     yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
-    # yield 'PACC-cal(log)', PACCcal(Pva, yva, post_proc='logistic')
-    # yield 'PACC-cal(iso)', PACCcal(Pva, yva, post_proc='isotonic')
 
-    # yield 'Bin-PACC', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC).fit(Pva, yva)
-    # yield 'Bin-PACC2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=2).fit(Pva, yva)
-    # yield 'Bin-PACC5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Pva, yva)
-    #yield 'Bin2-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Xva, yva)
-    #yield 'Bin3-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5).fit(Xva, yva) # with interpolation
-    #yield 'Bin4-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, dedicated=True).fit(Xva, yva) # dedicated quantifiers for bin
-    #yield 'Bin5-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, dedicated=False).fit(Xva, yva) # fill nans via interpolation
     yield 'Bin6-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva) # smooth and mono
-    #yield 'Bin6-PACC10', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=10, smooth=True, monotonicity=True).fit(Xva, yva)  # smooth and mono
-    #yield 'Bin7-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva) # isodense
-    #yield 'Bin9-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, dedicated=True, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva) # dedicated but fit_classifier=False
-    
-    # yield 'Bin-EM', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ).fit(Pva, yva)
-    # yield 'Bin-EM2', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=2).fit(Pva, yva)
-    # yield 'Bin-EM5', QuantifyBinsCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Pva, yva)
-    #yield 'Bin2-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
-    #yield 'Bin3-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5).fit(Xva, yva)
-    #yield 'Bin4-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, dedicated=True).fit(Xva, yva)
-    #yield 'Bin5-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, dedicated=False).fit(Xva, yva)
     yield 'Bin6-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
-    #yield 'Bin6-EM10', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=10, smooth=True, monotonicity=True).fit(Xva, yva)
-    #yield 'Bin7-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva)
-    #yield 'Bin9-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, dedicated=True, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva) # dedicated but fit_classifier=False
-
-
-    #yield 'Bin2-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5).fit(Xva, yva)
-    #yield 'Bin3-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5).fit(Xva, yva)
-    #yield 'Bin4-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, dedicated=True).fit(Xva, yva)
-    #yield 'Bin5-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, dedicated=False).fit(Xva, yva)
     yield 'Bin6-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
-    #yield 'Bin6-KDEy10', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=10, smooth=True, monotonicity=True).fit(Xva, yva)
-    #yield 'Bin7-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva)
-    #yield 'Bin9-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, dedicated=True, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva) # dedicated but fit_classifier=False
-    #yield 'Bin10-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, dedicated=True, smooth=True, monotonicity=True, isometric=False).fit(Xva, yva) # dedicated but fit_classifier=False
 
     # from cap
-    #yield 'Bin-ATC6', CAPCalibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6).fit(Xva, yva)
-    yield 'Bin2-ATC6', CAPCalibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
 
     def new_labelshift_protocol(X, y, classes):
         lc = LabelledCollection(X, y, classes=classes)
@@ -128,14 +94,9 @@ def calibration_methods(classifier):
         )
         return app
 
-    #yield 'Bin-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_labelshift_protocol(Xva,yva,[0,1])), nbins=6).fit(Xva, yva)
+    yield 'Bin2-ATC6', CAPCalibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
     yield 'Bin2-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_labelshift_protocol(Xva,yva,[0,1])), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
-    #yield 'Bin2-DoC12', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_labelshift_protocol(Xva, yva, [0, 1])), nbins=12, monotonicity=True, smooth=True).fit(Xva, yva)
-    
-    #yield 'Bin-LEAP6', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6).fit(Xva, yva)
     yield 'Bin2-LEAP6', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
-    #yield 'Bin2-LEAP12', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=12, monotonicity=True, smooth=True).fit(Xva, yva)
-
 
 
 def classifiers():
