@@ -16,7 +16,7 @@ from quapy.method.aggregative import EMQ
 import quapy.functional as F
 from sklearn.base import BaseEstimator
 
-from model.classifier_calibrators import LasCalCalibration, HellingerDistanceCalibration, TransCalCalibrator, \
+from model.classifier_calibrators import LasCalCalibration, DistributionMatchingCalibration, TransCalCalibrator, \
     CalibratorCompound
 from util import posterior_probabilities, accuracy, accuracy_from_contingency_table
 
@@ -312,7 +312,8 @@ class CalibratorCompound2CAP(ClassifierAccuracyPrediction):
 
         return acc_pred
 
-class HDC2CAP(ClassifierAccuracyPrediction):
+
+class DMCal2CAP(ClassifierAccuracyPrediction):
 
     def __init__(self, classifier: BaseEstimator):
         super().__init__(classifier)
@@ -322,28 +323,18 @@ class HDC2CAP(ClassifierAccuracyPrediction):
         posteriors = self.posterior_probabilities(X)
 
         # h(x)=1
-        Xpos = X[y_hat == 1]
         ypos = y[y_hat == 1]
         Ppos = posteriors[y_hat == 1]
 
         # h(x)=0
-        Xneg = X[y_hat == 0]
         yneg = y[y_hat == 0]
         Pneg = posteriors[y_hat == 0]
 
         # calibrator for predicted positives
-        DMpos = DistributionMatchingY(classifier=self.h, nbins=10)
-        preclassified_pos = LabelledCollection(Ppos, ypos)
-        data_pos = LabelledCollection(Xpos, ypos)
-        DMpos.aggregation_fit(classif_predictions=preclassified_pos, data=data_pos)
-        self.cal_pos = HellingerDistanceCalibration(DMpos)
+        self.cal_pos = DistributionMatchingCalibration(self.h, nbins=10).fit(Ppos, ypos)
 
         # calibrator for predicted negatives
-        DMneg = DistributionMatchingY(classifier=self.h, nbins=10)
-        preclassified_neg = LabelledCollection(Pneg, yneg)
-        data_neg = LabelledCollection(Xneg, yneg)
-        DMneg.aggregation_fit(classif_predictions=preclassified_neg, data=data_neg)
-        self.cal_neg = HellingerDistanceCalibration(DMneg)
+        self.cal_neg = DistributionMatchingCalibration(self.h, nbins=10).fit(Pneg, yneg)
 
         return self
 

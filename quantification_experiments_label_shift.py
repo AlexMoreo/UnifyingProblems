@@ -1,44 +1,23 @@
-from quapy.data import LabelledCollection
-from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML, ACC
-from quapy.method.base import BaseQuantifier
-from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
-from quapy.protocol import UPP, ArtificialPrevalenceProtocol
-from sklearn.linear_model import LogisticRegression
-import pandas as pd
+from quapy.method.aggregative import AggregativeQuantifier, CC
 import os
 from os.path import join
-import pathlib
-
-import util
-import quapy as qp
+import pandas as pd
+from quapy.method.aggregative import AggregativeQuantifier, CC
+from quapy.protocol import UniformPrevalenceProtocol
+from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
-import numpy as np
-from model.quantifiers import *
 
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
+from model.quantifiers import *
 
 result_dir = f'results/quantification/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
 
-
 datasets_selected = uci_datasets(top_length_k=10)
-
-
-def new_labelshift_protocol(X, y, classes):
-    lc = LabelledCollection(X, y, classes=classes)
-    app = ArtificialPrevalenceProtocol(
-        lc,
-        sample_size=SAMPLE_SIZE,
-        repeats=REPEATS,
-        return_type='labelled_collection',
-        random_state=0
-    )
-    return app
 
 
 def quantifiers(classifier, Xtr, ytr):
     # quantification methods
-    #yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
     yield 'CC', CC(classifier)
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
@@ -48,7 +27,7 @@ def quantifiers(classifier, Xtr, ytr):
 
     # CAP methods
     yield 'ATC-q', ATC2Quant(classifier)
-    yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_labelshift_protocol)
+    yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_artif_prev_protocol)
     yield 'LEAP-q', LEAP2Quant(classifier)
 
     # Calibration methods
@@ -85,7 +64,7 @@ for dataset in pbar:
     train_prev = train.prevalence()
 
     train, val = train.split_stratified(0.5, random_state=0)
-    app = UPP(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0)
+    app = UniformPrevalenceProtocol(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0)
     qp.environ['SAMPLE_SIZE'] = SAMPLE_SIZE
 
     h = LogisticRegression()

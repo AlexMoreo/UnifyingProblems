@@ -79,43 +79,73 @@ def get_ranks(df: DataFrame, value, expected_repetitions=100):
     n_methods = len(methods)
     n_classifiers = len(classifiers)
     n_experiments = expected_repetitions * n_classifiers * n_datasets
-    # outcomes = np.zeros(shape=(n_methods, n_experiments))
 
-    df_sorted = df.sort_values(by=["dataset", "classifier", "id"])
-    matrix = df_sorted.pivot_table(index="method", columns=["dataset", "classifier", "id"], values=value)
-    outcomes = matrix.to_numpy()
-    by_dataset = [{'method': method, 'dataset': idx, 'score': 1-val} for m, method in enumerate(methods) for idx, val in enumerate(outcomes[m])]
+    version=1
+    print(f'{version=}')
 
-    # collect all results in a tensor of shape (n_methods, total_experiments), in order of experiment idx
-    # for j, method in enumerate(methods):
-    #     df_method = df[df['method']==method]
-    #     method_results = []
-    #     for i, dataset in enumerate(datasets):
-    #         df_data_method = df_method[df_method['dataset']==dataset]
-    #         method_dataset_results = []
-    #         for k, classifier in enumerate(classifiers):
-    #             if classifier is not None:
-    #                 df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
-    #             else:
-    #                 df_data_method_cls = df_data_method
-    #             if len(df_data_method_cls)!=expected_repetitions:
-    #                 raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
-    #             for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
-    #                 method_dataset_results.append(val)
-    #                 by_dataset.append({
-    #                     'method': method,
-    #                     'dataset': dataset+str(id),
-    #                     'score': 1-val
-    #                 })
-    #         method_results.extend(method_dataset_results)
-    #     outcomes[j]=np.asarray(method_results)
 
-    outcomes = np.round(outcomes, decimals=10)  # otherwise, ties are not treated correctly due to float error precision
-    ranks = rankdata(outcomes, axis=0, method='average')
-    ave_ranks = ranks.mean(axis=1)
-    method_ranks = {method:ave_ranks[i] for i, method in enumerate(methods)}
-    df = pd.DataFrame(by_dataset)
-    return method_ranks, df
+    if version==1:
+        df_sorted2 = df.sort_values(by=["method", "dataset", "classifier", "id"])
+        matrix2 = df_sorted2.pivot_table(index="method", columns=["dataset", "classifier", "id"], values=value)
+        outcomes2 = np.round(matrix2.to_numpy(), decimals=8)
+        by_dataset2 = [{'method': method, 'dataset': f'{idx}', 'score': 1-val} for m, method in enumerate(methods) for idx, val in enumerate(outcomes2[m])]
+        df2 = pd.DataFrame(by_dataset2)
+        ranks2 = rankdata(outcomes2, axis=0, method='average')
+        ave_ranks2 = ranks2.mean(axis=1)
+        method_ranks2 = {method: ave_ranks2[i] for i, method in enumerate(methods)}
+        print(method_ranks2)
+        print(df2.pivot_table(
+            index="dataset",
+            columns="method",
+            values="score"
+        ))
+        return method_ranks2, df2
+
+    else:
+
+        # collect all results in a tensor of shape (n_methods, total_experiments), in order of experiment idx
+        outcomes = np.zeros(shape=(n_methods, n_experiments))
+        by_dataset = []
+        for j, method in enumerate(methods):
+            df_method = df[df['method']==method]
+            method_results = []
+            for i, dataset in enumerate(datasets):
+                df_data_method = df_method[df_method['dataset']==dataset]
+                method_dataset_results = []
+                for k, classifier in enumerate(classifiers):
+                    if classifier is not None:
+                        df_data_method_cls = df_data_method[df_data_method['classifier']==classifier]
+                    else:
+                        df_data_method_cls = df_data_method
+                    if len(df_data_method_cls)!=expected_repetitions:
+                        raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
+                    for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
+                        method_dataset_results.append(val)
+                        # by_dataset.append({
+                        #     'method': method,
+                        #     'dataset': classifier+'_'+dataset+'_'+str(id),
+                        #     'score': 1-val
+                        # })
+                        by_dataset.append({
+                            'method': method,
+                            'dataset': dataset+'_'+classifier,
+                            'score': 1-val
+                        })
+                method_results.extend(method_dataset_results)
+            outcomes[j]=np.asarray(method_results)
+
+        outcomes = np.round(outcomes, decimals=8)  # otherwise, ties are not treated correctly due to float error precision
+        ranks = rankdata(outcomes, axis=0, method='average')
+        ave_ranks = ranks.mean(axis=1)
+        method_ranks = {method:ave_ranks[i] for i, method in enumerate(methods)}
+        df = pd.DataFrame(by_dataset)
+        print(method_ranks)
+        print(df.pivot_table(
+            index="dataset",
+            columns="method",
+            values="score"
+        ))
+        return method_ranks, df
 
 
 def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p_val=0.05):

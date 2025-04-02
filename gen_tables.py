@@ -19,45 +19,46 @@ from os.path import join
 
 
 tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
-tasks = ['calibration']
+# tasks = ['classifier_accuracy_prediction']
 dataset_shifts=['label_shift', 'covariate_shift']
-dataset_shifts=['label_shift']
+# dataset_shifts=['label_shift']
 os.makedirs('cddiagrams', exist_ok=True)
 
 replace_method = {
     'HDcal8-sm-mono': 'DMCal',
-    'ATC-q': r'ATC$_{\rho}$',
-    'DoC-q': r'DoC$_{\rho}$',
-    'LEAP-q': r'LEAP$_{\rho}$',
-    'LEAP-PCC-q': r'LEAP$_{\rho}^{\text{PCC}}$',
-    'Cpcs-q-P': r'CPCS$_{\rho}$',
+    'ATC-q': r'ATC$_{\alpha 2 \rho}$',
+    'DoC-q': r'DoC$_{\alpha 2 \rho}$',
+    'LEAP-q': r'LEAP$_{\alpha 2 \rho}$',
+    'LEAP-PCC-q': r'LEAP$_{\alpha 2 \rho}^{\text{PCC}}$',
+    'Cpcs-q-P': r'CPCS$_{\zeta 2 \rho}$',
     'CPCS-P': r'CPCS',
-    'TransCal-q-P': r'TransCal$_{\rho}$',
+    'TransCal-q-P': r'TransCal$_{\zeta 2 \rho}$',
     'TransCal-S': r'TransCal',
-    'LasCal-q-P': r'LasCal$_{\rho}$',
+    'LasCal-q-P': r'LasCal$_{\zeta 2 \rho}$',
     'LasCal-P': r'LasCal',
-    'Head2Tail-q-P': r'Head2Tail$_{\rho}$',
-    'Cpcs-a-S': r'CPCS$_{\alpha}$',
-    'TransCal-a-S': r'TransCal$_{\alpha}$',
-    'LasCal-a-P': r'LasCal$_{\alpha}$',
-    'PACC-a': r'PACC$_{\alpha}$',
-    'EMQ-a': r'EMQ$_{\alpha}$',
-    'EMQ-BCTS-a': r'EMQ$_{\alpha}^{\text{BCTS}}$',
-    'KDEy-a': r'KDEy$_{\alpha}$',
-    'HDc-a-sm-mono': r'HDC$_{\alpha}$',
+    'Head2Tail-q-P': r'Head2Tail$_{\zeta 2 \rho}$',
+    'Head2Tail-P': r'Head2Tail',
+    'Cpcs-a-S': r'CPCS$_{\zeta 2 \alpha}$',
+    'TransCal-a-S': r'TransCal$_{\zeta 2 \alpha}$',
+    'LasCal-a-P': r'LasCal$_{\zeta 2 \alpha}$',
+    'PACC-a': r'PACC$_{\rho 2 \alpha}$',
+    'EMQ-a': r'EMQ$_{\rho 2 \alpha}$',
+    'EMQ-BCTS-a': r'EMQ$_{\rho 2 \alpha}^{\text{BCTS}}$',
+    'KDEy-a': r'KDEy$_{\rho 2 \alpha}$',
+    'HDc-a-sm-mono': r'DMCal$_{\zeta 2 \alpha}$',
     'EM': r'EMQ',
     'EM-BCTS': r'EMQ$^{\text{BCTS}}$',
     'EM-TransCal': r'EMQ$^{\text{TransCal}}$',
     'EMLasCal': r'EMQ$^{\text{LasCal}}$',
     'PACC-cal(soft)': r'PacCal$^{\sigma}$',
-    'Bin6-PCC5': r'PCC$_{\zeta}^{(5)}$',
-    'Bin6-PACC5': r'PACC$_{\zeta}^{(5)}$',
-    'Bin6-EM5': r'EMQ$_{\zeta}^{(5)}$',
-    'Bin6-KDEy5': r'KDEy$_{\zeta}^{(5)}$',
-    'Bin2-ATC6': r'ATC$_{\zeta}^{(6)}$',
-    'Bin2-DoC6': r'DoC$_{\zeta}^{(6)}$',
-    'Bin2-LEAP6': r'LEAP$_{\zeta}^{(6)}$',
-    'Bin2-LEAP-PCC-6': r'LEAP$_{\zeta}^{\text{PCC}(6)}$',
+    'Bin6-PCC5': r'$\text{PCC}^{5\text{B}}_{\rho 2\zeta}$', #r'PCC$_{\zeta}^{5\text{B}}$',
+    'Bin6-PACC5': r'PACC$_{\rho 2\zeta}^{5\text{B}}$',
+    'Bin6-EM5': r'EMQ$_{\rho 2\zeta}^{5\text{B}}$',
+    'Bin6-KDEy5': r'KDEy$_{\rho 2\zeta}^{5\text{B}}$',
+    'Bin2-ATC6': r'ATC$_{\alpha 2\zeta}^{6\text{B}}$',
+    'Bin2-DoC6': r'DoC$_{\alpha 2\zeta}^{6\text{B}}$',
+    'Bin2-LEAP6': r'LEAP$_{\alpha 2\zeta}^{6\text{B}}$',
+    'Bin2-LEAP-PCC-6': r'LEAP$_{\alpha 2\zeta}^{\text{PCC}-6\text{B}}$',
 }
 
 
@@ -88,9 +89,7 @@ def get_reference(task, dataset_shift):
 
     # add specific methods
     if task=='calibration' and dataset_shift=='label_shift':
-        reference = [
-            #'Head2Tail-S',
-                     'CPCS-P', 'TransCal-S', 'LasCal-P']
+        reference = ['Head2Tail-P', 'CPCS-P', 'TransCal-S', 'LasCal-P']
     if task == 'quantification' and dataset_shift=='covariate_shift':
         reference = ['PCC'] + reference
     if task == 'classifier_accuracy_prediction' and dataset_shift=='covariate_shift':
@@ -101,20 +100,14 @@ def get_reference(task, dataset_shift):
 def get_contenders(task, dataset_shift):
     if task == 'calibration':
         if dataset_shift == 'label_shift':
-            contenders = ['Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'EM',
-                          # 'EM-BCTS',
-                          'EMLasCal', 'PACC-cal(soft)', 'HDcal8-sm-mono']
-
-
-
-
+            contenders = ['Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'EM', 'EM-BCTS', 'EMLasCal', 'PACC-cal(soft)', 'HDcal8-sm-mono']
         if dataset_shift=='covariate_shift':
-            contenders = ['Bin6-PCC5', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'Bin2-LEAP-PCC-6', 'EM', 'EM-BCTS', 'PACC-cal(soft)', 'HDcal8-sm-mono'] #, 'HDcal8-sm-mono', 'PACC-cal(clip)', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6']
+            contenders = ['Bin6-PCC5', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6', 'Bin2-LEAP-PCC-6', 'EM', 'EM-BCTS', 'EM-TransCal', 'PACC-cal(soft)', 'HDcal8-sm-mono'] #, 'HDcal8-sm-mono', 'PACC-cal(clip)', 'Bin6-PACC5', 'Bin6-EM5', 'Bin6-KDEy5', 'Bin2-ATC6', 'Bin2-DoC6', 'Bin2-LEAP6']
     if task == 'classifier_accuracy_prediction':
         if dataset_shift=='label_shift':
-            contenders = ['Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'PACC-a', 'EMQ-a', 'KDEy-a', 'HDc-a-sm-mono']
+            contenders = ['PACC-a', 'EMQ-a', 'KDEy-a', 'Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'HDc-a-sm-mono']
         if dataset_shift=='covariate_shift':
-            contenders = ['Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'PCC-a', 'PACC-a', 'EMQ-a', 'EMQ-BCTS-a', 'KDEy-a', 'HDc-a-sm-mono']
+            contenders = ['PCC-a', 'PACC-a', 'EMQ-a', 'EMQ-BCTS-a', 'KDEy-a', 'Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'HDc-a-sm-mono']
     if task == 'quantification':
         if dataset_shift == 'label_shift':
             contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P'] #, 'Head2Tail-q-P']
@@ -254,7 +247,7 @@ def gen_table(tables_folder):
     lines = []
     lines.append(r'\begin{tabular}{' + column_format + '} ' + style['TOPLINE'])
     lines.append(r'\multicolumn{2}{c}{} & \multicolumn{' + str(n_baselines) + r'}{c|}{Baselines} & \multicolumn{' + str(
-        n_reference) + r'}{c|}{Reference} & \multicolumn{' + str(n_contenders) + r'}{c}{Contenders}' + style['ENDL'])
+        n_reference) + r'}{c|}{Reference} & \multicolumn{' + str(n_contenders) + r'}{c}{Adapted Methods}' + style['ENDL'])
     for i, classifier in enumerate(classifiers):
         table_arr = tables[classifier].as_str_array()
         prepare_strings(table_arr)
@@ -337,10 +330,11 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
 
     df = load_results(results_path, all_methods)
 
+    print(task, dataset_shift)
     counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
     ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
 
     cd_df['method'] = cd_df['method'].replace(replace_method)
-    # critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
+    critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
     gen_table(tables_folder='./fulltables/')
 

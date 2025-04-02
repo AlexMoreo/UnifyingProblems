@@ -22,7 +22,7 @@ import os
 from os.path import join
 from sklearn.metrics import brier_score_loss
 from model.classifier_accuracy_predictors import ATC, DoC, LEAP
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
 
 result_dir = f'results/calibration/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
@@ -41,62 +41,35 @@ class ResultRow:
 
 
 def calibration_methods(classifier):
-    # yield 'Uncal', UncalibratedWrap()
 
     # proper calibration methods
     yield 'Platt', PlattScaling().fit(Pva, yva)
-    # yield 'Isotonic', IsotonicCalibration().fit(Pva, yva)
-    yield 'CPCS-S', CpcsCalibrator(prob2logits=True)
+
+    yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False, n_components=50).fit(
+        Ftr=Xtr, ytr=ytr,
+        Fsrc=Xva, Zsrc=Pva, ysrc=yva
+    )
     yield 'CPCS-P', CpcsCalibrator(prob2logits=False)
-    # yield 'Head2Tail-S', HeadToTailCalibrator(prob2logits=True, n_components=50).fit(
-    #     Ftr=Xtr, ytr=ytr,
-    #     Fsrc=Xva, Zsrc=Pva, ysrc=yva
-    # )
-    # yield 'Head2Tail-P', HeadToTailCalibrator(prob2logits=False, n_components=50).fit(
-    #     Ftr=Xtr, ytr=ytr,
-    #     Fsrc=Xva, Zsrc=Pva, ysrc=yva
-    # )
     yield 'TransCal-S', TransCalCalibrator(prob2logits=True)
-    yield 'TransCal-P', TransCalCalibrator(prob2logits=False)
-    yield 'LasCal-S', LasCalCalibration(prob2logits=True) #convert them to logits
-    yield 'LasCal-P', LasCalCalibration(prob2logits=False) #do not convert to logits
+    yield 'LasCal-P', LasCalCalibration(prob2logits=False)
 
     # from quantification
-    yield 'EM', EM(train.prevalence())
+    yield 'EM', EMQ_Calibrator(train.prevalence())
     yield 'EM-BCTS', EMQ_BCTS_Calibrator().fit(Pva, yva)
-    yield 'EMLasCal', EMLasCal(train.prevalence(), prob2logits=True)
-    for nbins in [8]: #20, 25, 30, 35, 40]:
-        dm = DistributionMatchingY(classifier=classifier, nbins=nbins)
-        preclassified = LabelledCollection(Pva, yva)
-        dm.aggregation_fit(classif_predictions=preclassified, data=val)
-        # yield f'HDcal{nbins}', HellingerDistanceCalibration(dm)
-        # yield f'HDcal{nbins}-sm', HellingerDistanceCalibration(dm, smooth=True)
-        yield f'HDcal{nbins}-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
-        # yield f'HDcal{nbins}-sm-mono-wrong', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True, postsmooth=True)
-        # yield f'HDcal{nbins}-mono', HellingerDistanceCalibration(dm, smooth=False, monotonicity=True)
-    # yield 'PACC-cal(clip)', PACCcal(Pva, yva)
-    yield 'PACC-cal(soft)', PACCcal(Pva, yva, post_proc='softmax')
+    yield 'EMLasCal', EMQ_LasCal_Calibrator(train.prevalence(), prob2logits=True)
 
-    yield 'Bin6-PACC5', QuantifyCalibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva) # smooth and mono
-    yield 'Bin6-EM5', QuantifyCalibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
-    yield 'Bin6-KDEy5', QuantifyCalibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
+    yield f'HDcal8-sm-mono', DistributionMatchingCalibration(classifier, nbins=8).fit(Pva, yva)
+
+    yield 'PACC-cal(soft)', PacCcal(Pva, yva, post_proc='softmax')
+
+    yield 'Bin6-PACC5', Quant2Calibrator(classifier=classifier, quantifier_cls=PACC, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva) # smooth and mono
+    yield 'Bin6-EM5', Quant2Calibrator(classifier=classifier, quantifier_cls=EMQ, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
+    yield 'Bin6-KDEy5', Quant2Calibrator(classifier=classifier, quantifier_cls=KDEyML, nbins=5, smooth=True, monotonicity=True).fit(Xva, yva)
 
     # from cap
-
-    def new_labelshift_protocol(X, y, classes):
-        lc = LabelledCollection(X, y, classes=classes)
-        app = ArtificialPrevalenceProtocol(
-            lc,
-            sample_size=SAMPLE_SIZE,
-            repeats=REPEATS,
-            return_type='labelled_collection',
-            random_state=0
-        )
-        return app
-
-    yield 'Bin2-ATC6', CAPCalibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
-    yield 'Bin2-DoC6', CAPCalibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_labelshift_protocol(Xva,yva,[0,1])), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
-    yield 'Bin2-LEAP6', CAPCalibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
+    yield 'Bin2-ATC6', CAP2Calibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
+    yield 'Bin2-DoC6', CAP2Calibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_artif_prev_protocol(Xva, yva, [0, 1])), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
+    yield 'Bin2-LEAP6', CAP2Calibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
 
 
 def classifiers():

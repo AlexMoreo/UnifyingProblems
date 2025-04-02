@@ -34,10 +34,7 @@ def calibrator_iter(classifier):
     yield 'Platt', PlattScaling().fit(Pva, yva)
     yield 'LasCal-P', LasCalCalibration(prob2logits=False)
 
-    dm = DistributionMatchingY(classifier=classifier, nbins=8)
-    preclassified = LabelledCollection(Pva, yva)
-    dm.aggregation_fit(classif_predictions=preclassified, data=val)
-    yield f'HDcal8-sm-mono', HellingerDistanceCalibration(dm, smooth=True, monotonicity=True)
+    yield f'HDcal8-sm-mono', DistributionMatchingCalibration(classifier, nbins=8).fit(Pva, yva)
 
 for dataset_arg, classif_arg in itertools.product(dataset_iter(), classifier_iter()):
     dataset, (train, val, test) = dataset_arg

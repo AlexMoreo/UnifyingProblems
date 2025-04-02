@@ -68,16 +68,16 @@ class UncalibratedWrap(CalibratorSimple):
             return Z
 
 
-# class NaiveUncertain(CalibratorSimple):
-#     def __init__(self, train_prev=None):
-#         self.train_prev = train_prev
-#
-#     def calibrate(self, Z):
-#         if self.train_prev is None:
-#             uncertain = np.full_like(Z, fill_value=0.5)
-#         else:
-#             uncertain = np.tile(self.train_prev, (Z.shape[0],1))
-#         return uncertain
+class NaiveUncertain(CalibratorSimple):
+    def __init__(self, train_prev=None):
+        self.train_prev = train_prev
+
+    def calibrate(self, Z):
+        if self.train_prev is None:
+            uncertain = np.full_like(Z, fill_value=0.5)
+        else:
+            uncertain = np.tile(self.train_prev, (Z.shape[0],1))
+        return uncertain
 
 
 class PlattScaling(CalibratorSimple):
@@ -163,7 +163,7 @@ class LasCalCalibration(CalibratorSourceTarget):
         return Pte_calib
 
 
-class EMLasCal(LasCalCalibration):
+class EMQ_LasCal_Calibrator(LasCalCalibration):
 
     def __init__(self, train_prevalence, prob2logits=True):
         self.emq = EMQ()
@@ -174,7 +174,6 @@ class EMLasCal(LasCalCalibration):
         P_lascal = super().calibrate(Zsrc, ysrc, Ztgt)
         priors, posteriors = EMQ.EM(tr_prev=self.train_prevalence, posterior_probabilities=P_lascal)
         return posteriors
-
 
 
 class EMQ_BCTS_Calibrator(CalibratorSimple):
@@ -302,7 +301,7 @@ class HeadToTailCalibrator(CalibratorSimple):
         return Pte_recalib
     
 
-class EMTransCal(TransCalCalibrator):
+class EMQ_TransCal_Calibrator(TransCalCalibrator):
 
     def __init__(self, train_prevalence, prob2logits=True):
         self.emq = EMQ()
@@ -318,15 +317,22 @@ class EMTransCal(TransCalCalibrator):
 # -------------------------------------------------------------
 # Based on Quantification
 # -------------------------------------------------------------
-class HellingerDistanceCalibration(CalibratorSimple):
+class DistributionMatchingCalibration(CalibratorSimple):
 
-    def __init__(self, hdy:DistributionMatchingY, smooth=True, monotonicity=True):
-        self.hdy = hdy
+    def __init__(self, classifier, smooth=True, monotonicity=True, nbins=8):
+        self.h = classifier
+        self.nbins = nbins
         self.smooth = smooth
         self.monotonicity = monotonicity
 
+    def fit(self, P, y):
+        self.dm = DistributionMatchingY(classifier=self.h, nbins=self.nbins)
+        labelled_posteriors = LabelledCollection(P, y)
+        self.dm.aggregation_fit(classif_predictions=labelled_posteriors, data=None)
+        return self
+
     def calibrate(self, Z):
-        dm = self.hdy
+        dm = self.dm
         nbins = dm.nbins
         estim_prev = dm.aggregate(Z)
         hist_neg, hist_pos = dm.validation_distribution
@@ -348,13 +354,11 @@ class HellingerDistanceCalibration(CalibratorSimple):
             ([0.], (np.linspace(0., 1., nbins + 1)[:-1] + 0.5 / nbins), [1.]))  # this assumes binning=isometric
         uncalibrated_posteriors_pos = Z[:, 1]
         posteriors = np.interp(uncalibrated_posteriors_pos, x_coords, calibration_map)
-        # if self.postsmooth:
-        #     posteriors[1:-1]=np.mean(np.vstack([posteriors[:-2], posteriors[1:-1], posteriors[2:]]), axis=0)
         posteriors = np.asarray([1 - posteriors, posteriors]).T
         return posteriors
 
 
-class EM(CalibratorSimple):
+class EMQ_Calibrator(CalibratorSimple):
     def __init__(self, train_prevalence):
         self.emq = EMQ()
         self.train_prevalence = train_prevalence
@@ -364,22 +368,17 @@ class EM(CalibratorSimple):
         return posteriors
 
 
-class PACCcal(CalibratorSimple):
-    POST_PROCESSING = ['clip', 'softmax', 'logistic', 'isotonic']
+class PacCcal(CalibratorSimple):
+    
+    POST_PROCESSING = ['clip', 'softmax']
+
     def __init__(self, P, y, post_proc='clip'):
-        assert post_proc in PACCcal.POST_PROCESSING, 'unknown post_proc method'
+        assert post_proc in PacCcal.POST_PROCESSING, \
+            f'unknown post_proc method; valid ones are {PacCcal.POST_PROCESSING}'
         PteCond = PACC.getPteCondEstim(classes=[0,1], y=y, y_=P)
         self.tpr = PteCond[1,1]
         self.fpr = PteCond[1,0]
         self.post_proc = post_proc
-        if post_proc=='logistic':
-            cal = self._transform(P)
-            self.regressor = _SigmoidCalibration()
-            self.regressor.fit(cal, y)
-        elif post_proc == 'isotonic':
-            cal = self._transform(P)
-            self.regressor = IsotonicRegression(out_of_bounds="clip")
-            self.regressor.fit(cal, y)
 
     def _transform(self, P):
         tpr, fpr = self.tpr, self.fpr
@@ -396,16 +395,12 @@ class PACCcal(CalibratorSimple):
         if self.post_proc == 'clip':
             calib = qp.functional.as_binary_prevalence(Ppos, clip_if_necessary=True)
         elif (Ppos>1).any() or (Ppos<0).any():
-            if self.post_proc == 'softmax':
-                calib = softmax(np.asarray([1 - Ppos, Ppos]).T, axis=1)
-            else:
-                if (Ppos>1).any() or (Ppos<0).any():
-                    Ppos = self.regressor.predict(Ppos)
-                calib = np.asarray([1-Ppos,Ppos]).T
+            # softmax, only if out of bounds
+            calib = softmax(np.asarray([1 - Ppos, Ppos]).T, axis=1)
         return calib
 
 
-class QuantifyCalibrator(CalibratorTarget):
+class Quant2Calibrator(CalibratorTarget):
     def __init__(self, classifier, quantifier_cls, nbins=5, dedicated=False, monotonicity=False, smooth=False, isometric=True):
         self.classifier = classifier
         self.quantifier_cls = quantifier_cls
@@ -423,20 +418,12 @@ class QuantifyCalibrator(CalibratorTarget):
         else:
             self.bins = util.isodense_binning(self.nbins, posteriors)
 
-        #print('bins', self.bins)
-
         self.quantifiers_bin = []
         if self.dedicated:
             # learns one dedicated adjustment for each bin
             for bin_low, bin_high in zip(self.bins[:-1],self.bins[1:]):
                 sel = np.logical_and(posteriors>=bin_low, posteriors<bin_high)
                 #print(f'#sel {sum(sel)} in which #positives {sum(y[sel]==1)} and #negative {sum(y[sel]==0)}')
-                """if sum(sel)>0 and sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
-                    quantifier_bin = self.quantifier_cls(self.classifier)
-                    quantifier_bin.fit(LabelledCollection(X[sel], y[sel], classes=[0,1]), fit_classifier=False)
-                    self.quantifiers_bin.append(quantifier_bin)
-                else:
-                    self.quantifiers_bin.append(None)"""
                 if sum(sel)>0:
                     if sum(y[sel]==1)>4 and sum(y[sel]==0)>4:
                         quantifier_bin = self.quantifier_cls(self.classifier)
@@ -492,14 +479,12 @@ class QuantifyCalibrator(CalibratorTarget):
         return calibrated
 
 
-
-
 # ---------------------------------------------------------------
 # Based on CAP
 # ---------------------------------------------------------------
-class CAPCalibrator(CalibratorTarget):
+class CAP2Calibrator(CalibratorTarget):
 
-    def __init__(self, classifier, cap_method, nbins=6, monotonicity=False, smooth=False):
+    def __init__(self, classifier, cap_method, nbins=6, monotonicity=True, smooth=True):
         assert nbins%2==0, f'unexpected number of bins {nbins}; use an odd number of bins'
         self.classifier = classifier
         self.cap = cap_method

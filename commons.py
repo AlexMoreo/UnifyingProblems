@@ -3,6 +3,9 @@ import numpy as np
 import quapy as qp
 import torch
 from os.path import join
+
+from quapy.data import LabelledCollection
+from quapy.protocol import NaturalPrevalenceProtocol, ArtificialPrevalenceProtocol, UniformPrevalenceProtocol
 from scipy.special import softmax
 import quapy.functional as F
 
@@ -144,3 +147,26 @@ def uci_datasets(top_length_k=10):
         for dataset in qp.datasets.UCI_BINARY_DATASETS
     ], key=lambda x:x[1])[-top_length_k:]))
     return list(datasets_selected)
+
+
+def new_artif_prev_protocol(X, y, classes=[0, 1]):
+    lc = LabelledCollection(X, y, classes=classes)
+    protocol = UniformPrevalenceProtocol(
+        lc,
+        sample_size=SAMPLE_SIZE,
+        repeats=REPEATS,
+        return_type='labelled_collection',
+        random_state=0
+    )
+    return protocol
+
+def new_natur_prev_protocol(X, y, classes=[0, 1]):
+    lc = LabelledCollection(X, y, classes=classes)
+    protocol = NaturalPrevalenceProtocol(
+        lc,
+        sample_size=SAMPLE_SIZE,
+        repeats=REPEATS,
+        return_type='labelled_collection',
+        random_state=0
+    )
+    return protocol

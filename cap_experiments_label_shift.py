@@ -17,7 +17,7 @@ import os
 from os.path import join
 from dataclasses import dataclass, asdict
 import pandas as pd
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
 
 result_dir = f'results/classifier_accuracy_prediction/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
@@ -42,22 +42,15 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(Xva, yva)
     yield 'ATC', ATC(h).fit(Xva, yva)
-    val_prot = UPP(val, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0, return_type='labelled_collection')
-    yield 'DoC', DoC(h, protocol=val_prot).fit(Xva, yva)
+    yield 'DoC', DoC(h, protocol=new_artif_prev_protocol(*val.Xy)).fit(Xva, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(Xva, yva)
-
 
     # Calibration 2 CAP
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    #yield 'Cpcs-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
     yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    #yield 'TransCal-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    # yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
-    #yield 'LasCal-a', LasCal2CAP(classifier=h, probs2logits=True).fit(Xva, yva)
     yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(Xva, yva)
-    # yield 'HDc-a', HDC2CAP(classifier=h).fit(Xva, yva)
-    yield 'HDc-a-sm-mono', HDC2CAP(classifier=h).fit(Xva, yva)
+
+    yield 'HDc-a-sm-mono', DMCal2CAP(classifier=h).fit(Xva, yva)
 
     # Quantification 2 CAP
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)

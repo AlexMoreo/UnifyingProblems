@@ -47,9 +47,7 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     # CAP methods
     yield 'Naive', NaiveIID(classifier=h).fit(x_val_idx, yva)
     yield 'ATC', ATC(h).fit(x_val_idx, yva)
-    val_lc = LabelledCollection(x_val_idx, yva)
-    val_prot = NPP(val_lc, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0, return_type='labelled_collection')
-    yield 'DoC', DoC(h, protocol=val_prot).fit(x_val_idx, yva)
+    yield 'DoC', DoC(h, protocol=new_natur_prev_protocol(x_val_idx, yva)).fit(x_val_idx, yva)
     yield 'LEAP', LEAP(classifier=h, q_class=KDEyML(classifier=h)).fit(x_val_idx, yva)
     yield 'LEAP-PCC', LEAP(classifier=h, q_class=PCC(classifier=h)).fit(x_val_idx, yva)
 
@@ -57,8 +55,6 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'Cpcs-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=CpcsCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
     yield 'TransCal-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=TransCalCalibrator, probs2logits=True, Ftr=Ftr, ytr=ytr).fit(x_val_idx, yva, hidden=Fva)
     yield 'LasCal-a-P', LasCal2CAP(classifier=h, probs2logits=False).fit(x_val_idx, yva)
-    #yield 'Head2Tail-a-S', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=True, Ftr=Xtr, ytr=ytr).fit(x_val_idx, yva)
-    ## yield 'Head2Tail-a-P', CalibratorCompound2CAP(classifier=h, calibrator_cls=HeadToTailCalibrator, probs2logits=False, Ftr=Xtr, ytr=ytr).fit(Xva, yva)
 
     # Quantification 2 CAP
     yield 'PCC-a', Quant2CAP(classifier=h, quantifier_class=PCC).fit(x_val_idx, yva)
@@ -67,7 +63,7 @@ def cap_methods(h:BaseEstimator, setup: Setup, x_val_idx):
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(x_val_idx, yva)
     yield 'EMQ-BCTS-a', Quant2CAP(classifier=h, quantifier_class=EMQ.EMQ_BCTS).fit(x_val_idx, yva)
 
-    yield 'HDc-a-sm-mono', HDC2CAP(classifier=h).fit(x_val_idx, yva)
+    yield 'HDc-a-sm-mono', DMCal2CAP(classifier=h).fit(x_val_idx, yva)
 
 
 all_results = []

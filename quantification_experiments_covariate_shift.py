@@ -34,25 +34,12 @@ class ResultRow:
     ae: float
     rae: float
 
-def new_natural_protocol(X, y, classes):
-    lc = LabelledCollection(X, y, classes=classes)
-    app = NaturalPrevalenceProtocol(
-        lc,
-        sample_size=SAMPLE_SIZE,
-        repeats=REPEATS,
-        return_type='labelled_collection',
-        random_state=0
-    )
-    return app
-
-
-
-
 
 def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):
-    # quantification methods
-    #yield 'Naive', MaximumLikelihoodPrevalenceEstimation()
+    # baseline methods
     yield 'CC', CC(classifier)
+
+    # quantification methods
     yield 'PCC', PCC(classifier)
     yield 'PACC', PACC(classifier)
     yield 'EMQ', EMQ(classifier)
@@ -61,7 +48,7 @@ def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):
 
     # CAP methods
     yield 'ATC-q', ATC2Quant(classifier)
-    yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_natural_protocol)
+    yield 'DoC-q', DoC2Quant(classifier, protocol_constructor=new_natur_prev_protocol)
     yield 'LEAP-q', LEAP2Quant(classifier)
     yield 'LEAP-PCC-q', LEAP2Quant(classifier, quantifier_cls=PCC)
 
@@ -71,11 +58,7 @@ def quantifiers(classifier, setup: Setup, x_val_idx:np.ndarray):
     yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
     yield 'TransCal-q-P', Transcal2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
     yield 'Cpcs-q-P', Cpcs2Quant(classifier, Ftr=Ftr, ytr=ytr, prob2logits=False)
-    # yield 'Head2Tail-q-S', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=True)
     yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=False, n_components=50)
-    # yield 'Head2Tail-q-S', HeadToTail2Quant(classifier, Ftr, ytr, prob2logits=True, n_components=50)
-    ## yield 'PACC(LasCal)', PACCLasCal(classifier)
-    ## yield 'EMQ(LasCal)', EMQLasCal(classifier)
 
 
 def fit_quantifier(quant, x_val_idx, val_labels, val_hidden):
