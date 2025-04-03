@@ -31,6 +31,7 @@ def classifier_iter():
     yield 'mlp', MLPClassifier()
 
 def calibrator_iter(classifier):
+    yield 'Uncal', UncalibratedWrap()
     yield 'Platt', PlattScaling().fit(Pva, yva)
     yield 'LasCal-P', LasCalCalibration(prob2logits=False)
 

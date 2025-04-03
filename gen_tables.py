@@ -22,7 +22,7 @@ tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
 # tasks = ['classifier_accuracy_prediction']
 dataset_shifts=['label_shift', 'covariate_shift']
 # dataset_shifts=['label_shift']
-os.makedirs('cddiagrams', exist_ok=True)
+
 
 replace_method = {
     'HDcal8-sm-mono': 'DMCal',
@@ -217,6 +217,7 @@ def gen_table(tables_folder):
 
     config = Configuration()
     config.style = 'rules'
+    config.side_columns = True
     myformat = Format(config)
     style = myformat.get_latex_style(n_cols)
 
@@ -312,29 +313,29 @@ def gen_table(tables_folder):
     util.save_text(tabular_path, '\n'.join(lines))
     tabular2pdf(tabular_path, join(tables_folder, f'{filename}.pdf'), landscape=False, resizebox=True)
 
+if __name__ == '__main__':
+    folder = commons.EXPERIMENT_FOLDER
+    for task, dataset_shift in itertools.product(tasks, dataset_shifts):
+        results_path = join('./results', task, dataset_shift, folder)
 
-folder = commons.EXPERIMENT_FOLDER
-for task, dataset_shift in itertools.product(tasks, dataset_shifts):
-    results_path = join('./results', task, dataset_shift, folder)
+        error = get_error_name(task, dataset_shift)
 
-    error = get_error_name(task, dataset_shift)
+        baselines = get_baselines(task, dataset_shift)
+        reference = get_reference(task, dataset_shift)
+        contenders = get_contenders(task, dataset_shift)
 
-    baselines = get_baselines(task, dataset_shift)
-    reference = get_reference(task, dataset_shift)
-    contenders = get_contenders(task, dataset_shift)
+        classifiers = get_classifiers(task, dataset_shift)
+        datasets = get_datasets(task, dataset_shift)
 
-    classifiers = get_classifiers(task, dataset_shift)
-    datasets = get_datasets(task, dataset_shift)
+        all_methods = baselines + reference + contenders
 
-    all_methods = baselines + reference + contenders
+        df = load_results(results_path, all_methods)
 
-    df = load_results(results_path, all_methods)
+        print(task, dataset_shift)
+        counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
+        ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
 
-    print(task, dataset_shift)
-    counts, reject_H0 = util.count_successes(df, baselines=reference, value=error, expected_repetitions=100)
-    ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
-
-    cd_df['method'] = cd_df['method'].replace(replace_method)
-    critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
-    gen_table(tables_folder='./fulltables/')
+        cd_df['method'] = cd_df['method'].replace(replace_method)
+        critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
+        gen_table(tables_folder='./fulltables/')
 

@@ -84,7 +84,7 @@ def get_ranks(df: DataFrame, value, expected_repetitions=100):
     print(f'{version=}')
 
 
-    if version==1:
+    if version==2:
         df_sorted2 = df.sort_values(by=["method", "dataset", "classifier", "id"])
         matrix2 = df_sorted2.pivot_table(index="method", columns=["dataset", "classifier", "id"], values=value)
         outcomes2 = np.round(matrix2.to_numpy(), decimals=8)
