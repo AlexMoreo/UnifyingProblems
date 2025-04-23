@@ -40,40 +40,6 @@ class Setup:
     out_test: Dataset
 
 
-def iterate_datasets__depr():
-
-    def load_dataset(path, domain, splitname, reduce=None, random_seed=0):
-        hidden = torch.load(join(path, f'{domain}.{splitname}.hidden_states.pt')).numpy()
-        logits = torch.load(join(path, f'{domain}.{splitname}.logits.pt')).numpy()
-        labels = torch.load(join(path, f'{domain}.{splitname}.labels.pt')).numpy()
-        if reduce is not None and isinstance(reduce,int) and reduce<len(labels):
-            np.random.seed(random_seed)
-            sel_idx = np.random.choice(reduce, size=reduce, replace=False)
-            hidden = hidden[sel_idx]
-            logits = logits[sel_idx]
-            labels = labels[sel_idx]
-        posteriors = softmax(logits, axis=1)
-        prevalence = F.prevalence_from_labels(labels, classes=[0,1])
-        return Dataset(hidden=hidden, logits=logits, posteriors=posteriors, prevalence=prevalence, labels=labels)
-
-    for source in sentiment_datasets:
-        for model in models:
-            path = f'./neural_training/embeds/{source}/{model}'
-
-            train = load_dataset(path, 'source', 'train', reduce=5000)
-            valid = load_dataset(path, 'source', 'validation')
-
-            for target in sentiment_datasets:
-                if target == source:
-                    target_prefix = 'source'
-                else:
-                    target_prefix = f'target_{target}'
-
-                test = load_dataset(path, target_prefix, 'test')
-
-                yield Setup(model=model, source=source, target=target, train=train, valid=valid, test=test)
-
-
 def iterate_datasets_covariate_shift(neural_models_path=None):
     if neural_models_path is None:
         neural_models_path = NEURAL_PRETRAINED
@@ -104,21 +70,6 @@ def iterate_datasets_covariate_shift(neural_models_path=None):
                 if target==source: continue
                 out_test = load_dataset(path, f'target_{target}', 'test')
                 yield Setup(model=model, source=source, target=target, train=train, valid=valid, in_test=in_test, out_test=out_test)
-
-
-def yield_random_samples__depr(test: Dataset, repeats, samplesize):
-    np.random.seed(0)
-    indexes = []
-    test_length = len(test.labels)
-    for _ in range(repeats):
-        indexes.append(np.random.choice(test_length, size=samplesize, replace=True))
-    for index in indexes:
-        sample_hidden = test.hidden[index]
-        sample_logits = test.logits[index]
-        sample_labels = test.labels[index]
-        sample_posteriors = test.posteriors[index]
-        sample_prevalence = F.prevalence_from_labels(sample_labels, classes=[0,1])
-        yield Dataset(hidden=sample_hidden, logits=sample_logits, labels=sample_labels, posteriors=sample_posteriors, prevalence=sample_prevalence)
 
 
 def yield_random_samples(in_test: Dataset, out_test: Dataset, repeats, samplesize):

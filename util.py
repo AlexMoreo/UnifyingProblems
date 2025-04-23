@@ -45,10 +45,8 @@ def cal_error(conf_scores, y, arelogits=False):
     return ece * 100
 
 
-
 def cap_error(acc_true, acc_estim):
     return abs(acc_true-acc_estim)
-
 
 
 def prob2logits(P, asnumpy=False):
@@ -64,6 +62,7 @@ def accuracy(y_true, y_pred):
 
 def accuracy_from_contingency_table(ct):
     return np.diagonal(ct).sum() / ct.sum()
+
 
 def get_ranks(df: DataFrame, value, expected_repetitions=100):
     from scipy.stats import rankdata
@@ -201,9 +200,6 @@ def count_successes(df: DataFrame, baselines, value, expected_repetitions=100, p
         # establish the theoretical probability of success assuming the method and the baselines are not different
         # i.e., for 3 baselines, P(M>1 method) = 75%, P(M>2 methods) = 50%, P(M>3 methods) = 25%
         rand_expected_success = {b:1.-b/(n_baselines+1) for b in range(1, n_baselines+1)}
-        # method_successes_stat  = {
-        #     b:1-binom.cdf(v-1, total_experiments, rand_expected_success[b])<p_val for b, v in method_successes_count.items()
-        # }
         method_successes_stat = {}
         for b, v in method_successes_count.items():
             # we only keep testing for b baselines if the test was passed for b-1 baselines

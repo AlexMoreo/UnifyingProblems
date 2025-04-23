@@ -229,7 +229,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--model_name", type=str, default="google-bert/bert-base-uncased")
-    parser.add_argument("--dataset_name", type=str, default="imdb")
+    parser.add_argument("--dataset_name", type=str, default="yelp")
     parser.add_argument("--num_classes", type=int, default=2)
     parser.add_argument("--max_length", type=int, default=512)
     parser.add_argument("--nepochs", type=int, default=5)
