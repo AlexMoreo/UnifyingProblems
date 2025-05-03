@@ -110,12 +110,12 @@ class DoC2Quant(Method2Quant):
         y_pred = self.h.predict(X)
 
         pred_positives = y_pred==1
-        acc_pos = self.doc_pos.predict(X[pred_positives])
         n_pos = sum(pred_positives)
+        acc_pos = self.doc_pos.predict(X[pred_positives]) if n_pos>0 else 0
 
         pred_negatives = y_pred==0
-        acc_neg = self.doc_neg.predict(X[pred_negatives])
         n_neg = sum(pred_negatives)
+        acc_neg = self.doc_neg.predict(X[pred_negatives]) if n_neg>0 else 0
 
         estim_pos_prev = acc_pos * (n_pos / n) + (1 - acc_neg) * (n_neg / n)
         estim_prev = F.as_binary_prevalence(estim_pos_prev)
