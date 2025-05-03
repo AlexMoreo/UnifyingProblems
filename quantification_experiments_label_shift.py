@@ -1,3 +1,5 @@
+from itertools import product
+
 from quapy.method.aggregative import AggregativeQuantifier, CC
 import os
 from os.path import join
@@ -5,6 +7,9 @@ import pandas as pd
 from quapy.method.aggregative import AggregativeQuantifier, CC
 from quapy.protocol import UniformPrevalenceProtocol
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 from tqdm import tqdm
 
 from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
@@ -49,14 +54,22 @@ def fit_quantifier(quant, train, val):
         raise ValueError(f'{quant}: unrecognized object')
 
 
+def classifiers():
+    yield 'lr', LogisticRegression()
+    yield 'nb', GaussianNB()
+    #yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
+    yield 'mlp', MLPClassifier()
+
+
 print('Datasets:', datasets_selected)
 print('Repeats:', REPEATS)
 
 all_results = []
 methods_order = []
 
-pbar = tqdm(datasets_selected, total=len(datasets_selected))
-for dataset in pbar:
+n_classifiers = len([c for _,c in classifiers()])
+pbar = tqdm(product(datasets_selected, classifiers()), total=len(datasets_selected)*n_classifiers)
+for dataset, (cls_name, h) in pbar:
     pbar.set_description(f'running: {dataset}')
 
     data = qp.datasets.fetch_UCIBinaryDataset(dataset)
@@ -67,14 +80,14 @@ for dataset in pbar:
     app = UniformPrevalenceProtocol(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0)
     qp.environ['SAMPLE_SIZE'] = SAMPLE_SIZE
 
-    h = LogisticRegression()
+    # h = LogisticRegression()
     h.fit(*train.Xy)
 
     for name, quant in quantifiers(h, *train.Xy):
         if name not in methods_order:
             methods_order.append(name)
 
-        result_method_dataset_path = join(result_dir, f'{name}_{dataset}.csv')
+        result_method_dataset_path = join(result_dir, f'{name}_{dataset}_{cls_name}.csv')
         if os.path.exists(result_method_dataset_path):
             report = pd.read_csv(result_method_dataset_path)
         else:
@@ -85,6 +98,7 @@ for dataset in pbar:
             report['shift'] = qp.error.ae(true_prevs, np.tile(train_prev, (REPEATS, 1)))
             report['method'] = name
             report['dataset'] = dataset
+            report['classifier'] = cls_name
             report.to_csv(result_method_dataset_path, index=False)
 
         all_results.append(report)

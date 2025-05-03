@@ -141,7 +141,7 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         plt.ylabel(f"{err_name} (log scale)")
     else:
         plt.ylabel(f"{err_name}")
-    plt.xlabel("Shift")
+    plt.xlabel("Level of shift")
     plt.title(f"{task.title().replace('_',' ')} under {dataset_shift.replace('_', ' ').title()}")
     plt.xlim(0,1)
     plt.grid(True, which="both", axis='y', linestyle="--", linewidth=0.5, alpha=0.7)

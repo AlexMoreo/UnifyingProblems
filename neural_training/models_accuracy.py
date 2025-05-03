@@ -8,6 +8,11 @@ def get_accuracy(dataset: Dataset):
     return np.mean(predictions==dataset.labels)
 
 accs = []
+rename = {
+    'bert-base-uncased': 'BERT',
+    'distilbert-base-uncased': 'DistilBERT',
+    'roberta-base': 'RoBERTa'
+}
 
 for setup in iterate_datasets_covariate_shift(neural_models_path='./embeds'):
     print(f'{setup.model}: {setup.source} {setup.target}')
@@ -15,14 +20,14 @@ for setup in iterate_datasets_covariate_shift(neural_models_path='./embeds'):
     print(f'\tsource acc = {get_accuracy(setup.in_test) * 100:.2f}%')
     print(f'\ttarget acc = {get_accuracy(setup.out_test) * 100:.2f}%')
     accs.append({
-        'model': setup.model,
+        'model': rename[setup.model],
         'source': setup.source,
         'target': setup.source,
         'accuracy': get_accuracy(setup.in_test),
         'ECE': cal_error(setup.in_test.logits, setup.in_test.labels, arelogits=True)
     })
     accs.append({
-        'model': setup.model,
+        'model': rename[setup.model],
         'source': setup.source,
         'target': setup.target,
         'accuracy': get_accuracy(setup.out_test),
@@ -30,5 +35,7 @@ for setup in iterate_datasets_covariate_shift(neural_models_path='./embeds'):
     })
 
 df = pd.DataFrame(accs)
-print(df.pivot_table(index=['model', 'source'], columns='target', values='accuracy'))
-print(df.pivot_table(index=['model', 'source'], columns='target', values='ECE'))
+pv = df.pivot_table(index=['model', 'source'], columns='target', values='accuracy')
+print(pv)
+pv.to_latex('./accuracy.tex', float_format='%.3f')
+# print(df.pivot_table(index=['model', 'source'], columns='target', values='ECE'))
