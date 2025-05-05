@@ -120,16 +120,16 @@ def get_ranks(df: DataFrame, value, expected_repetitions=100):
                         raise ValueError(f'unexpected length of dataframe {len(df_data_method_cls)}')
                     for id, val in zip(df_data_method_cls.id.values, df_data_method_cls[value].values):
                         method_dataset_results.append(val)
-                        # by_dataset.append({
-                        #     'method': method,
-                        #     'dataset': classifier+'_'+dataset+'_'+str(id),
-                        #     'score': 1-val
-                        # })
                         by_dataset.append({
                             'method': method,
-                            'dataset': dataset+'_'+classifier,
+                            'dataset': classifier+'_'+dataset+'_'+str(id),
                             'score': 1-val
                         })
+                        # by_dataset.append({
+                        #     'method': method,
+                        #     'dataset': dataset+'_'+classifier,
+                        #     'score': 1-val
+                        # })
                 method_results.extend(method_dataset_results)
             outcomes[j]=np.asarray(method_results)
 

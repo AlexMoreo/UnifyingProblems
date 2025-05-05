@@ -41,8 +41,8 @@ def quantifiers(classifier, Xtr, ytr):
     yield 'LasCal-q-P', LasCal2Quant(classifier, prob2logits=False)
     yield 'Head2Tail-q-P', HeadToTail2Quant(classifier, Xtr, ytr, prob2logits=False, n_components=50)
 
-    yield 'PACC(LasCal)', PACCLasCal(classifier, prob2logits=True)
-    yield 'EMQ(LasCal)2-S', EMLasCal2Quant(classifier, prob2logits=True)
+    # yield 'PACC(LasCal)', PACC_LasCal(classifier, prob2logits=True)
+    yield 'EMQ(LasCal)2-S', EMQ_LasCal(classifier, prob2logits=True)
 
 
 def fit_quantifier(quant, train, val):
@@ -57,7 +57,7 @@ def fit_quantifier(quant, train, val):
 def classifiers():
     yield 'lr', LogisticRegression()
     yield 'nb', GaussianNB()
-    #yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
+    yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
     yield 'mlp', MLPClassifier()
 
 

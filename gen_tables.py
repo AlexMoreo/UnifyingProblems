@@ -19,7 +19,7 @@ from os.path import join
 
 
 tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
-# tasks = ['classifier_accuracy_prediction']
+# tasks = ['quantification']
 dataset_shifts=['label_shift', 'covariate_shift']
 # dataset_shifts=['label_shift']
 
@@ -46,6 +46,9 @@ replace_method = {
     'PCC-a': r'PCC$_{\rho 2 \alpha}$',
     'EMQ-a': r'EMQ$_{\rho 2 \alpha}$',
     'EMQ-BCTS-a': r'EMQ$_{\rho 2 \alpha}^{\text{BCTS}}$',
+    'EMQ-BCTS': r'EMQ$^{\text{BCTS}}$',
+    'PACC(LasCal)': r'PACC$^{\text{LasCal}}$',
+    'EMQ(LasCal)2-S': r'EMQ$^{\text{LasCal}}$',
     'KDEy-a': r'KDEy$_{\rho 2 \alpha}$',
     'HDc-a-sm-mono': r'DMCal$_{\zeta 2 \alpha}$',
     'EM': r'EMQ',
@@ -92,8 +95,11 @@ def get_reference(task, dataset_shift):
     # add specific methods
     if task=='calibration' and dataset_shift=='label_shift':
         reference = ['Head2Tail-P', 'CPCS-P', 'TransCal-S', 'LasCal-P']
-    if task == 'quantification' and dataset_shift=='covariate_shift':
-        reference = ['PCC'] + reference
+    if task == 'quantification':
+        if dataset_shift=='covariate_shift':
+            reference = ['PCC'] + reference
+        else:
+            reference = ['PACC', 'EMQ', 'EMQ-BCTS', 'KDEy']
     if task == 'classifier_accuracy_prediction' and dataset_shift=='covariate_shift':
         reference += ['LEAP-PCC']
     return reference
@@ -112,16 +118,17 @@ def get_contenders(task, dataset_shift):
             contenders = ['PCC-a', 'PACC-a', 'EMQ-a', 'EMQ-BCTS-a', 'KDEy-a', 'Cpcs-a-S', 'TransCal-a-S', 'LasCal-a-P', 'HDc-a-sm-mono']
     if task == 'quantification':
         if dataset_shift == 'label_shift':
-            contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P'] #, 'Head2Tail-q-P']
+            contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P', 'Head2Tail-q-P', 'EMQ(LasCal)2-S']
         if dataset_shift == 'covariate_shift':
             contenders = ['ATC-q', 'DoC-q', 'LEAP-q', 'LEAP-PCC-q', 'Cpcs-q-P', 'TransCal-q-P', 'LasCal-q-P']
 
     return contenders
 
+
 def get_classifiers(task, dataset_shift):
     classifiers = {
         'covariate_shift': ['bert-base-uncased', 'distilbert-base-uncased', 'roberta-base'],
-        'label_shift': ['lr', 'nb', 'knn', 'mlp'] if task!='quantification' else ['']
+        'label_shift': ['lr', 'nb', 'knn', 'mlp']
     }[dataset_shift]
     return classifiers
 
@@ -190,7 +197,7 @@ def critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder):
         alpha=.05,
         adjustment="holm",
         reverse_x=False,
-        axis_options={"title": f"{task} {dataset_shift}".replace('_', r'\_')},
+        axis_options={"title": f"{task} under {dataset_shift}".replace('_', r' ').title()},
     )
     tikz2pdf(tex_path, pdf_path)
 

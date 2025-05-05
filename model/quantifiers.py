@@ -142,7 +142,7 @@ class LasCal2Quant(Method2Quant):
         return prev_estim
 
 
-class EMLasCal2Quant(Method2Quant):
+class EMQ_LasCal(Method2Quant):
     def __init__(self, classifier, prob2logits=True):
         self.classifier = classifier
         self.lascal = LasCalCalibration(prob2logits)
@@ -228,7 +228,7 @@ class HeadToTail2Quant(Method2Quant):
 
 
 
-class PACCLasCal(PACC):
+class PACC_LasCal(PACC):
 
     def __init__(self,
                  classifier: BaseEstimator=None,

@@ -2,7 +2,6 @@ import itertools
 import os
 from glob import glob
 import pandas as pd
-import util
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -18,8 +17,11 @@ def included_method(file_path, include_methods):
             return True
     return False
 
+
 tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
 dataset_shifts = ['covariate_shift', 'label_shift']
+tasks = ['quantification']
+dataset_shifts = ['label_shift']
 
 for task, dataset_shift in itertools.product(tasks, dataset_shifts):
     input_dir = f'./results/{task}/{dataset_shift}/repeats_100_samplesize_250'
@@ -30,7 +32,6 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         err_name = err.upper()
         if dataset_shift == 'covariate_shift':
             include_methods = ['Platt', 'Head2Tail', 'CPCS', 'TransCal', 'LasCal', 'Bin6-PCC5', 'Bin6-PACC5', 'Bin2-DoC6']
-            logscale=False
         else:
             include_methods = ['Platt', 'Head2Tail-P', 'CPCS-P', 'TransCal-S', 'LasCal-P', 'EM-BCTS', 'HDcal8-sm-mono']
     elif task == 'quantification':
@@ -38,19 +39,15 @@ for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         err_name = err.upper()
         if dataset_shift == 'covariate_shift':
             include_methods = ['CC', 'PCC', 'PACC', 'EMQ', 'KDEy', 'DoC-q', 'LEAP-PCC-q', 'TransCal-q-P']
-            # logscale = True
         else:
             include_methods = ['CC', 'PACC', 'EMQ', 'KDEy', 'DoC-q', 'LasCal-q-P']
-            # logscale = True
     elif task == 'classifier_accuracy_prediction':
         err = 'err'
         err_name = 'AE'
         if dataset_shift == 'covariate_shift':
             include_methods = ['Naive', 'ATC', 'DoC', 'LEAP', 'LEAP-PCC', 'PCC-a', 'LasCal-a-P']
-            # logscale = True
         else:
             include_methods = ['Naive', 'ATC', 'DoC', 'LEAP', 'Cpcs-a-S', 'PACC-a']
-            # logscale = True
     custom_palette = {
         "Naive": "black",
         "Platt": "black",
