@@ -1,23 +1,16 @@
-import pickle
-
 from quapy.method.aggregative import KDEyML, EMQ
 from quapy.protocol import UPP
-from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neural_network import MLPClassifier
-from sklearn.neighbors import KNeighborsClassifier
 from model.classifier_accuracy_predictors import *
 from model.classifier_calibrators import CpcsCalibrator, HeadToTailCalibrator
 from itertools import product
 from util import accuracy, cap_error
 import quapy as qp
 from tqdm import tqdm
-import numpy as np
 import os
 from os.path import join
 from dataclasses import dataclass, asdict
 import pandas as pd
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol, classifiers
 
 result_dir = f'results/classifier_accuracy_prediction/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
@@ -56,13 +49,6 @@ def cap_methods(h:BaseEstimator, Xva, yva):
     yield 'PACC-a', Quant2CAP(classifier=h, quantifier_class=PACC).fit(Xva, yva)
     yield 'EMQ-a', Quant2CAP(classifier=h, quantifier_class=EMQ).fit(Xva, yva)
     yield 'KDEy-a', Quant2CAP(classifier=h, quantifier_class=KDEyML).fit(Xva, yva)
-
-
-def classifiers():
-    yield 'lr', LogisticRegression()
-    yield 'nb', GaussianNB()
-    yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
-    yield 'mlp', MLPClassifier()
 
 
 all_results = []
@@ -115,18 +101,3 @@ for dataset, (cls_name, h) in pbar:
 
 df = pd.concat(all_results)
 
-from new_table import LatexTable
-
-tables = []
-for classifier_name, _ in classifiers():
-    df_h = df[df['classifier']==classifier_name]
-    print(df_h)
-    table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='err')
-    table.name = f'cap_pps_{classifier_name}'
-    table.reorder_methods(methods_order)
-    table.format.configuration.show_std=False
-    table.format.configuration.side_columns = True
-    tables.append(table)
-
-
-LatexTable.LatexPDF(f'./tables/cap_label_shift.pdf', tables)

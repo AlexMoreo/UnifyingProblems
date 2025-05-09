@@ -1,8 +1,7 @@
 from copy import deepcopy
 from typing import Callable
 import quapy as qp
-from quapy.method.aggregative import AggregativeQuantifier, DistributionMatchingY, PACC, ACC
-from quapy.method.base import BaseQuantifier
+from quapy.method.aggregative import AggregativeQuantifier, ACC
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import confusion_matrix
 import numpy as np
@@ -16,13 +15,15 @@ from quapy.method.aggregative import EMQ
 import quapy.functional as F
 from sklearn.base import BaseEstimator
 
-from model.classifier_calibrators import LasCalCalibration, DistributionMatchingCalibration, TransCalCalibrator, \
+from model.classifier_calibrators import (
+    LasCalCalibration,
+    DistributionMatchingCalibration,
     CalibratorCompound
+)
 from util import posterior_probabilities, accuracy, accuracy_from_contingency_table
 
 
 # Adapted from https://github.com/lorenzovolpi/QuAcc/blob/devel
-
 
 class ClassifierAccuracyPrediction(ABC):
 
@@ -58,6 +59,7 @@ class ClassifierAccuracyPrediction(ABC):
 
 
 class NaiveIID(ClassifierAccuracyPrediction):
+    # Estimates classifier accuracy on the validation set (i.e., disregarding the shift effect)
 
     def __init__(self, classifier: BaseEstimator):
         super().__init__(classifier)
@@ -72,6 +74,9 @@ class NaiveIID(ClassifierAccuracyPrediction):
 
 
 class ATC(ClassifierAccuracyPrediction):
+    # Average Threshold Confidence: https://arxiv.org/abs/2201.04234
+    # Leveraging Unlabeled Data to Predict Out-of-Distribution Performance
+    # by Saurabh Garg, Sivaraman Balakrishnan, Zachary C. Lipton, Behnam Neyshabur, Hanie Sedghi
 
     VALID_FUNCTIONS = {"maxconf", "neg_entropy"}
 
@@ -131,6 +136,9 @@ class ATC(ClassifierAccuracyPrediction):
 
 
 class DoC(ClassifierAccuracyPrediction):
+    # Differences of Confidence: https://arxiv.org/abs/2107.03315
+    # Predicting with Confidence on Unseen Distributions
+    # by Devin Guillory, Vaishaal Shankar, Sayna Ebrahimi, Trevor Darrell, Ludwig Schmidt
 
     def __init__(self, classifier: BaseEstimator, protocol: AbstractProtocol, clip_vals=(0, 1)):
         super().__init__(classifier)
@@ -215,6 +223,7 @@ def smooth(prevalences, epsilon=1e-5, axis=None):
 
 
 class LasCal2CAP(ClassifierAccuracyPrediction):
+    # Adapts LasCal as a CAP method
 
     def __init__(self, classifier: BaseEstimator, probs2logits=True):
         super().__init__(classifier)
@@ -251,6 +260,7 @@ class LasCal2CAP(ClassifierAccuracyPrediction):
 
 
 class CalibratorCompound2CAP(ClassifierAccuracyPrediction):
+    # Adapts any CalibratorCompound instance as a CAP method
 
     def __init__(self, classifier: BaseEstimator, calibrator_cls: CalibratorCompound, Ftr, ytr, probs2logits=True):
         super().__init__(classifier)
@@ -314,6 +324,7 @@ class CalibratorCompound2CAP(ClassifierAccuracyPrediction):
 
 
 class DMCal2CAP(ClassifierAccuracyPrediction):
+    # Adapts DMCal as a CAP method
 
     def __init__(self, classifier: BaseEstimator):
         super().__init__(classifier)
@@ -361,6 +372,7 @@ def check_posteriors(q, posteriors):
 
 
 class Quant2CAP(ClassifierAccuracyPrediction):
+    # Adapts any quantification method as a CAP method
 
     def __init__(self, classifier: BaseEstimator, quantifier_class):
         super().__init__(classifier)
@@ -426,6 +438,9 @@ class Quant2CAP(ClassifierAccuracyPrediction):
 
 
 class LEAP(ClassifierAccuracyPrediction):
+    # Linear-Equation-based Acuracy Prediction: https://link.springer.com/chapter/10.1007/978-3-031-78980-9_17
+    # A Simple Method for Classifier Accuracy Prediction Under Prior Probability Shift
+    # by Lorenzo Volpi, Alejandro Moreo, Fabrizio Sebastiani
 
     def __init__(self,
                  classifier,

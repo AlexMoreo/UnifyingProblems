@@ -5,9 +5,14 @@ import torch
 from os.path import join
 
 from quapy.data import LabelledCollection
-from quapy.protocol import NaturalPrevalenceProtocol, ArtificialPrevalenceProtocol, UniformPrevalenceProtocol
+from quapy.protocol import NaturalPrevalenceProtocol, UniformPrevalenceProtocol
 from scipy.special import softmax
 import quapy.functional as F
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 
 
 REPEATS = 100
@@ -98,6 +103,13 @@ def uci_datasets(top_length_k=10):
         for dataset in qp.datasets.UCI_BINARY_DATASETS
     ], key=lambda x:x[1])[-top_length_k:]))
     return list(datasets_selected)
+
+
+def classifiers():
+    yield 'lr', LogisticRegression()
+    yield 'nb', GaussianNB()
+    yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
+    yield 'mlp', MLPClassifier()
 
 
 def new_artif_prev_protocol(X, y, classes=[0, 1]):

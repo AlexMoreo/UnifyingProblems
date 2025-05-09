@@ -1,18 +1,11 @@
 from itertools import product
-
-from quapy.method.aggregative import AggregativeQuantifier, CC
 import os
 from os.path import join
 import pandas as pd
 from quapy.method.aggregative import AggregativeQuantifier, CC
 from quapy.protocol import UniformPrevalenceProtocol
-from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neural_network import MLPClassifier
 from tqdm import tqdm
-
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol, classifiers
 from model.quantifiers import *
 
 result_dir = f'results/quantification/label_shift/{EXPERIMENT_FOLDER}'
@@ -54,13 +47,6 @@ def fit_quantifier(quant, train, val):
         raise ValueError(f'{quant}: unrecognized object')
 
 
-def classifiers():
-    yield 'lr', LogisticRegression()
-    yield 'nb', GaussianNB()
-    yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
-    yield 'mlp', MLPClassifier()
-
-
 print('Datasets:', datasets_selected)
 print('Repeats:', REPEATS)
 
@@ -80,7 +66,6 @@ for dataset, (cls_name, h) in pbar:
     app = UniformPrevalenceProtocol(test, sample_size=SAMPLE_SIZE, repeats=REPEATS, random_state=0)
     qp.environ['SAMPLE_SIZE'] = SAMPLE_SIZE
 
-    # h = LogisticRegression()
     h.fit(*train.Xy)
 
     for name, quant in quantifiers(h, *train.Xy):
@@ -111,12 +96,4 @@ print(df)
 print(pivot)
 print(pivot.mean(axis=0))
 
-
-from new_table import LatexTable
-
-table = LatexTable.from_dataframe(df, method='method', benchmark='dataset', value='ae')
-table.name = 'quantification_pps'
-table.reorder_methods(methods_order)
-table.format.configuration.show_std=False
-table.latexPDF('./tables/quantification_label_shift.pdf')
 

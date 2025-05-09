@@ -1,29 +1,26 @@
 import itertools
-import os
-
 import numpy as np
 from critdd import Diagram
-
 import commons
 from glob import glob
-from os.path import join
 import pandas as pd
-import sys
-from pathlib import Path
 import util
-from result_table.src.format import Format
-from result_table.src.new_table import LatexTable, Configuration
-from result_table.src.tools import *
-from tools import tabular2pdf
+from pytables.format import Format
+from pytables.new_table import LatexTable, Configuration
+from pytables.tools import *
 from os.path import join
+
+'''
+Generates the tables appearing in the paper
+'''
 
 
 tasks = ['classifier_accuracy_prediction', 'calibration', 'quantification']
-# tasks = ['quantification']
 dataset_shifts=['label_shift', 'covariate_shift']
-# dataset_shifts=['label_shift']
 
 
+# replace internal identifiers with readable names
+# -----------------------------------------------------------
 replace_method = {
     'HDcal8-sm-mono': 'DMCal',
     'ATC-q': r'ATC$_{\alpha 2 \rho}$',
@@ -56,7 +53,7 @@ replace_method = {
     'EM-TransCal': r'EMQ$^{\text{TransCal}}$',
     'EMLasCal': r'EMQ$^{\text{LasCal}}$',
     'PACC-cal(soft)': r'PacCal$^{\sigma}$',
-    'Bin6-PCC5': r'$\text{PCC}^{5\text{B}}_{\rho 2\zeta}$', #r'PCC$_{\zeta}^{5\text{B}}$',
+    'Bin6-PCC5': r'$\text{PCC}^{5\text{B}}_{\rho 2\zeta}$',
     'Bin6-PACC5': r'PACC$_{\rho 2\zeta}^{5\text{B}}$',
     'Bin6-EM5': r'EMQ$_{\rho 2\zeta}^{5\text{B}}$',
     'Bin6-KDEy5': r'KDEy$_{\rho 2\zeta}^{5\text{B}}$',
@@ -66,10 +63,20 @@ replace_method = {
     'Bin2-LEAP-PCC-6': r'LEAP$_{\alpha 2\zeta}^{\text{PCC}-6\text{B}}$',
 }
 
+replace_classifier = {
+    'bert-base-uncased': 'BERT',
+    'distilbert-base-uncased': 'DistilBERT',
+    'roberta-base': 'RoBERTa',
+    'lr': 'Logistic Regression',
+    'nb': 'Naïve Bayes',
+    'knn': 'k Nearest Neighbor',
+    'mlp': 'Multi-layer Perceptron'
+}
+
 
 def get_error_name(task, dataset_shift):
     error = {
-        'calibration': 'ece',
+        'calibration': 'ece',  # set to "brier" for generating tables with Brier score values
         'classifier_accuracy_prediction': 'err',
         'quantification': 'ae'
     }[task]
@@ -173,6 +180,18 @@ def tikz2pdf(tikz_path, pdf_path, landscape=False):
     latex2pdf(pdf_path)
 
 
+def escape_latex_underscore(s):
+    import re
+    s = re.sub(r'(?<!\\)_', r'\_', s)
+    return s
+
+
+def texttt(s):
+    s = r'\texttt{'+s+'}'
+    s = s.replace('->', r'}$\rightarrow$\texttt{')
+    return s
+
+
 def critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder):
     filename = f'{task}-{dataset_shift}'
     tex_path = join(diagrams_folder, f'diagrams/{filename}.tex')
@@ -202,7 +221,7 @@ def critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder):
     tikz2pdf(tex_path, pdf_path)
 
 
-def gen_table(tables_folder):
+def gen_table(tables_folder, ranks):
     tables = {}
     for i, classifier in enumerate(classifiers):
         if classifier == '':
@@ -215,13 +234,11 @@ def gen_table(tables_folder):
         table.format.configuration.show_std = False
         tables[classifier] = table
 
-    n_setups = len(datasets)
     n_classifiers = len(classifiers)
     n_methods = len(all_methods)
     n_baselines = len(baselines)
     n_reference = len(reference)
     n_contenders = len(contenders)
-    # n_rows = 2 + n_setups * n_classifiers
     n_cols = 2 + n_methods
 
     config = Configuration()
@@ -230,27 +247,12 @@ def gen_table(tables_folder):
     myformat = Format(config)
     style = myformat.get_latex_style(n_cols)
 
-    def escape_latex_underscore(s):
-        import re
-        s = re.sub(r'(?<!\\)_', r'\_', s)
-        s = s.replace('->', '$\\rightarrow$')
-        return s
-
     def prepare_strings(table_arr):
         for j in range(1, table_arr.shape[1]):
             table_arr[0, j] = escape_latex_underscore(table_arr[0, j])
         for i in range(1, table_arr.shape[0]):
             table_arr[i, 0] = escape_latex_underscore(table_arr[i, 0])
-
-    replace_classifier = {
-        'bert-base-uncased': 'BERT',
-        'distilbert-base-uncased': 'DistilBERT',
-        'roberta-base': 'RoBERTa',
-        'lr': 'Logistic Regression',
-        'nb': 'Naïve Bayes',
-        'knn': 'k Nearest Neighbor',
-        'mlp': 'Multi-layer Perceptron'
-    }
+            table_arr[i, 0] = texttt(table_arr[i, 0])
 
     # column_format = style['column_format']
     column_format = 'cc|' + 'c' * n_baselines + '|' + 'c' * n_reference + '|' + 'c' * n_contenders
@@ -322,8 +324,12 @@ def gen_table(tables_folder):
     util.save_text(tabular_path, '\n'.join(lines))
     tabular2pdf(tabular_path, join(tables_folder, f'{filename}.pdf'), landscape=False, resizebox=True)
 
+
 if __name__ == '__main__':
+
     folder = commons.EXPERIMENT_FOLDER
+    GENERATE_CD_DIAGRAMS = False
+
     for task, dataset_shift in itertools.product(tasks, dataset_shifts):
         results_path = join('./results', task, dataset_shift, folder)
 
@@ -345,6 +351,7 @@ if __name__ == '__main__':
         ranks, cd_df = util.get_ranks(df, value=error, expected_repetitions=100)
 
         cd_df['method'] = cd_df['method'].replace(replace_method)
-        critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
-        gen_table(tables_folder='./fulltables/')
+        if GENERATE_CD_DIAGRAMS:
+            critical_difference_diagram(cd_df, task, dataset_shift, diagrams_folder='./cddiagrams/')
+        gen_table(tables_folder='./fulltables/', ranks=ranks)
 

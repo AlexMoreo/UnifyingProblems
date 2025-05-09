@@ -2,23 +2,18 @@ import numpy as np
 import quapy as qp
 import torch
 from abstention.calibration import TempScaling
-from numpy.ma.core import shape
 from quapy.data import LabelledCollection
-from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
-from sklearn.base import BaseEstimator, clone
 from sklearn.calibration import _SigmoidCalibration
 from sklearn.isotonic import IsotonicRegression
 import quapy.functional as F
 import util
-from calibrator import cal_acc_error, get_weight_feature_space
-from lascal import Calibrator
-from methods import HeadToTail, Cpcs, TransCal
 from quapy.method.aggregative import DistributionMatchingY, EMQ, ACC, PACC
 from scipy.special import softmax
 from abc import ABC, abstractmethod
 from sklearn.decomposition import PCA
 
-
+from lascal.post_hoc_calibration.calibrator import cal_acc_error, Calibrator, get_weight_feature_space
+from lascal.post_hoc_calibration.methods import TransCal, Cpcs, HeadToTail
 
 EPSILON = 1e-7
 

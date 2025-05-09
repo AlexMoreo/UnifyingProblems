@@ -1,15 +1,9 @@
 from quapy.method.aggregative import KDEyML, EMQ, PCC
-from quapy.protocol import NPP
-from sklearn.linear_model import LogisticRegression
-
 from model.classifier_accuracy_predictors import *
 from model.classifier_calibrators import CpcsCalibrator, HeadToTailCalibrator
 from util import accuracy, cap_error
-import quapy as qp
 from tqdm import tqdm
-import numpy as np
 import os
-from os.path import join
 from util import PrecomputedClassifier
 from dataclasses import dataclass, asdict
 import pandas as pd
@@ -123,15 +117,3 @@ print(df)
 print(pivot)
 print(pivot.mean(axis=0))
 
-from new_table import LatexTable
-
-tables = []
-for classifier_name in models:
-    df_h = df[df['classifier']==classifier_name]
-    table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='err')
-    table.name = f'cap_cv_AE_{classifier_name}'
-    table.reorder_methods(methods_order)
-    table.format.configuration.show_std=False
-    table.format.configuration.side_columns = True
-    tables.append(table)
-LatexTable.LatexPDF('./tables/cap_covariate_shift.pdf', tables=tables)

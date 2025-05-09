@@ -1,20 +1,10 @@
-from quapy.data import LabelledCollection
 from quapy.method.aggregative import PACC, EMQ, AggregativeQuantifier, CC, PCC, KDEyML, ACC
-from quapy.method.base import BaseQuantifier
-from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
-from quapy.protocol import NaturalPrevalenceProtocol
-from sklearn.linear_model import LogisticRegression
 import pandas as pd
 import os
-from os.path import join
-import pathlib
 from util import PrecomputedClassifier
-import quapy as qp
 from tqdm import tqdm
-import numpy as np
 from model.quantifiers import *
 from dataclasses import dataclass, asdict
-
 from commons import *
 
 
@@ -137,15 +127,3 @@ print(pivot)
 print(pivot.mean(axis=0))
 
 
-from new_table import LatexTable
-
-tables = []
-for classifier_name in models:
-    df_h = df[df['classifier']==classifier_name]
-    table = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ae')
-    table.name = f'quantification_cv_AE_{classifier_name}'
-    table.reorder_methods(methods_order)
-    table.format.configuration.show_std=False
-    table.format.configuration.side_columns = True
-    tables.append(table)
-LatexTable.LatexPDF('./tables/quantification_covariate_shift.pdf', tables=tables)

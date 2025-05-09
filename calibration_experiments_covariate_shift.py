@@ -1,12 +1,6 @@
-from itertools import product
 import os
 from dataclasses import dataclass, asdict
-from quapy.protocol import NaturalPrevalenceProtocol
-import torch
-from os.path import join
-import numpy as np
 from sklearn.metrics import brier_score_loss
-from sympy.multipledispatch.dispatcher import source
 import pandas as pd
 from tqdm import tqdm
 from quapy.method.aggregative import KDEyML
@@ -14,7 +8,6 @@ from quapy.method.aggregative import PCC
 from model.classifier_calibrators import *
 from model.classifier_accuracy_predictors import ATC, DoC, LEAP
 from util import cal_error, PrecomputedClassifier
-from scipy.special import softmax
 from commons import *
 
 
@@ -33,7 +26,6 @@ class ResultRow:
     classifier: str
     ece: float
     brier: float
-
 
 
 def calibrators(setup):
@@ -96,83 +88,57 @@ def get_calibrated_posteriors(calibrator, train, valid, test):
     return calib_posteriors
 
 
-all_results = []
-method_order = []
+if __name__ == '__main__':
+    all_results = []
+    method_order = []
 
-pbar = tqdm(iterate_datasets_covariate_shift(), total=total_setups_covariate_shift)
-for setup in pbar:
-    description = f'[{setup.model}]::{setup.source}->{setup.target}'
+    pbar = tqdm(iterate_datasets_covariate_shift(), total=total_setups_covariate_shift)
+    for setup in pbar:
+        description = f'[{setup.model}]::{setup.source}->{setup.target}'
 
-    for cal_name, calibrator in calibrators(setup):
-        if cal_name not in method_order:
-            method_order.append(cal_name)
+        for cal_name, calibrator in calibrators(setup):
+            if cal_name not in method_order:
+                method_order.append(cal_name)
 
-        result_method_setup_path = join(result_dir, f'{cal_name}_{setup.model}_{setup.source}__{setup.target}.csv')
-        if os.path.exists(result_method_setup_path):
-            report = pd.read_csv(result_method_setup_path)
-        else:
-            method_setup_results = []
-            ece_ave = []
-            for idx, (test_sample, shift) in enumerate(yield_random_samples(setup.in_test, setup.out_test, repeats=REPEATS, samplesize=SAMPLE_SIZE)):
-                calib_posteriors = get_calibrated_posteriors(calibrator, setup.train, setup.valid, test_sample)
+            result_method_setup_path = join(result_dir, f'{cal_name}_{setup.model}_{setup.source}__{setup.target}.csv')
+            if os.path.exists(result_method_setup_path):
+                report = pd.read_csv(result_method_setup_path)
+            else:
+                method_setup_results = []
+                ece_ave = []
+                for idx, (test_sample, shift) in enumerate(yield_random_samples(setup.in_test, setup.out_test, repeats=REPEATS, samplesize=SAMPLE_SIZE)):
+                    calib_posteriors = get_calibrated_posteriors(calibrator, setup.train, setup.valid, test_sample)
 
-                ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
-                brier_score = brier_score_loss(y_true=test_sample.labels, y_proba=calib_posteriors[:, 1])
-                ece_ave.append(ece)
-                pbar.set_description(description + f' {cal_name} ({idx}/{REPEATS}) ECE-ave={np.mean(ece_ave):.5f}')
+                    ece = cal_error(calib_posteriors, test_sample.labels, arelogits=False)
+                    brier_score = brier_score_loss(y_true=test_sample.labels, y_proba=calib_posteriors[:, 1])
+                    ece_ave.append(ece)
+                    pbar.set_description(description + f' {cal_name} ({idx}/{REPEATS}) ECE-ave={np.mean(ece_ave):.5f}')
 
-                result = ResultRow(
-                    dataset=f'{setup.source}->{setup.target}',
-                    source=setup.source,
-                    target=setup.target,
-                    id=idx,
-                    shift=shift,
-                    method=cal_name,
-                    classifier=setup.model,
-                    ece=ece,
-                    brier=brier_score
-                )
+                    result = ResultRow(
+                        dataset=f'{setup.source}->{setup.target}',
+                        source=setup.source,
+                        target=setup.target,
+                        id=idx,
+                        shift=shift,
+                        method=cal_name,
+                        classifier=setup.model,
+                        ece=ece,
+                        brier=brier_score
+                    )
 
-                method_setup_results.append(asdict(result))
+                    method_setup_results.append(asdict(result))
 
-            report = pd.DataFrame(method_setup_results)
-            report.to_csv(result_method_setup_path, index=False)
+                report = pd.DataFrame(method_setup_results)
+                report.to_csv(result_method_setup_path, index=False)
 
-        all_results.append(report)
+            all_results.append(report)
 
-df = pd.concat(all_results)
-pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='ece')
-print('ECE')
-print(pivot)
+    df = pd.concat(all_results)
+    pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='ece')
+    print('ECE')
+    print(pivot)
 
-pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='brier')
-print('Brier score')
-print(pivot)
-
-from new_table import LatexTable
-
-tables = []
-for classifier_name in models:
-    df_h = df[df['classifier']==classifier_name]
-    table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
-    table_ece.name = f'calibration_cv_ECE_{classifier_name}'
-    table_ece.reorder_methods(method_order)
-    table_ece.format.configuration.show_std=False
-    table_ece.format.configuration.side_columns = True
-    tables.append(table_ece)
-
-    table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
-    table_brier.name = f'calibration_cv_brier_{classifier_name}'
-    table_brier.reorder_methods(method_order)
-    table_brier.format.configuration.show_std = False
-    table_brier.format.configuration.side_columns = True
-    tables.append(table_brier)
-
-LatexTable.LatexPDF(f'./tables/calibration_covariate_shift.pdf', tables)
-
-
-
-
-
-
+    pivot = df.pivot_table(index=['classifier', 'dataset'], columns='method', values='brier')
+    print('Brier score')
+    print(pivot)
 

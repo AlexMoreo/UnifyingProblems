@@ -1,28 +1,19 @@
-from sklearn.linear_model import LogisticRegression
 import pandas as pd
-import numpy as np
-from sklearn.naive_bayes import GaussianNB
 from itertools import product
 
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
-
-import util
 from model.classifier_calibrators import *
 from tqdm import tqdm
 import quapy as qp
-from quapy.data import LabelledCollection
-from quapy.method.aggregative import DistributionMatchingY, KDEyML
-from quapy.protocol import UPP, ArtificialPrevalenceProtocol
+from quapy.method.aggregative import KDEyML
+from quapy.protocol import UPP
 from dataclasses import dataclass, asdict
 from util import cal_error
 import os
 from os.path import join
 from sklearn.metrics import brier_score_loss
 from model.classifier_accuracy_predictors import ATC, DoC, LEAP
-from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol
+from commons import REPEATS, SAMPLE_SIZE, EXPERIMENT_FOLDER, uci_datasets, new_artif_prev_protocol, classifiers
+
 
 result_dir = f'results/calibration/label_shift/{EXPERIMENT_FOLDER}'
 os.makedirs(result_dir, exist_ok=True)
@@ -70,13 +61,6 @@ def calibration_methods(classifier):
     yield 'Bin2-ATC6', CAP2Calibrator(classifier=classifier, cap_method=ATC(classifier), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
     yield 'Bin2-DoC6', CAP2Calibrator(classifier=classifier, cap_method=DoC(classifier, protocol=new_artif_prev_protocol(Xva, yva, [0, 1])), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
     yield 'Bin2-LEAP6', CAP2Calibrator(classifier=classifier, cap_method=LEAP(classifier, KDEyML(classifier=classifier)), nbins=6, monotonicity=True, smooth=True).fit(Xva, yva)
-
-
-def classifiers():
-    yield 'lr', LogisticRegression()
-    yield 'nb', GaussianNB()
-    yield 'knn', KNeighborsClassifier(n_neighbors=10, weights='uniform')
-    yield 'mlp', MLPClassifier()
 
 
 def calibrate(model, Xtr, ytr, Xva, Pva, yva, Xte, Pte):
@@ -142,25 +126,4 @@ if __name__ == '__main__':
             all_results.append(report)
 
     df = pd.concat(all_results)
-
-    from new_table import LatexTable
-
-    tables = []
-    for classifier_name, _ in classifiers():
-        df_h = df[df['classifier']==classifier_name]
-        table_ece = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='ece')
-        table_ece.name = f'calibration_pps_ECE_{classifier_name}'
-        table_ece.reorder_methods(method_order)
-        table_ece.format.configuration.show_std=False
-        table_ece.format.configuration.side_columns = True
-        tables.append(table_ece)
-
-        table_brier = LatexTable.from_dataframe(df_h, method='method', benchmark='dataset', value='brier')
-        table_brier.name = f'calibration_pps_brier_{classifier_name}'
-        table_brier.reorder_methods(method_order)
-        table_brier.format.configuration.show_std = False
-        table_brier.format.configuration.side_columns = True
-        tables.append(table_brier)
-
-    LatexTable.LatexPDF(f'./tables/calibration_label_shift.pdf', tables)
 
