@@ -16,7 +16,7 @@ pip install -r requirements.txt
 ## Scripts
 
 The scripts that reproduce all the experiments are listed in the root folder as:
-_[taskname]\_[experiments]\_[type-of-shift].py_; for example [calibration_experiments_label_shift.py](calibration_experiments_label_shift.py)
+_[taskname]\_experiments\_[type-of-shift].py_; for example [calibration_experiments_label_shift.py](calibration_experiments_label_shift.py)
 
 
 
